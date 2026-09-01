@@ -21,6 +21,7 @@ export default function AdminDashboard() {
 
   const [citas, setCitas] = useState<any[]>([]);
   const [logs, setLogs] = useState<any[]>([]); 
+  const [evaluaciones, setEvaluaciones] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   
   const [activeTab, setActiveTab] = useState("monitoreo"); 
@@ -36,9 +37,6 @@ export default function AdminDashboard() {
   });
   const [guardandoCierre, setGuardandoCierre] = useState(false);
 
-  // ==========================================================
-  // SEGURIDAD: VERIFICACIÓN DE USUARIO Y CIERRE POR INACTIVIDAD
-  // ==========================================================
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => { 
       setUser(currentUser); 
@@ -47,24 +45,19 @@ export default function AdminDashboard() {
     return () => unsubscribe();
   }, []);
 
-  // Motor de Inactividad (Cierra sesión tras 15 minutos sin mover el mouse)
   useEffect(() => {
     if (!user) return;
-    
     let timeoutId: NodeJS.Timeout;
-    const tiempoMaximoInactividad = 15 * 60 * 1000; // 15 minutos en milisegundos
+    const tiempoMaximoInactividad = 15 * 60 * 1000;
 
     const resetTimer = () => {
       if (timeoutId) clearTimeout(timeoutId);
-      timeoutId = setTimeout(() => {
-        signOut(auth); // Cierra sesión automáticamente
-      }, tiempoMaximoInactividad);
+      timeoutId = setTimeout(() => { signOut(auth); }, tiempoMaximoInactividad);
     };
 
-    // Escuchamos cualquier actividad del usuario
     const eventos = ['mousemove', 'keydown', 'mousedown', 'touchstart'];
     eventos.forEach(evento => window.addEventListener(evento, resetTimer));
-    resetTimer(); // Inicia el reloj al cargar
+    resetTimer();
 
     return () => {
       if (timeoutId) clearTimeout(timeoutId);
@@ -72,9 +65,6 @@ export default function AdminDashboard() {
     };
   }, [user]);
 
-  // ==========================================================
-  // CARGA DE BASE DE DATOS
-  // ==========================================================
   useEffect(() => {
     if (!user) return; 
     const q = query(collection(db, "citas"), orderBy("fechaRegistro", "desc"));
@@ -93,7 +83,17 @@ export default function AdminDashboard() {
       const logsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setLogs(logsData);
     });
-    return () => unsubscribeLogs();
+
+    const qEval = query(collection(db, "evaluaciones_tecnicas"), orderBy("fechaEvaluacion", "desc"));
+    const unsubscribeEval = onSnapshot(qEval, (snapshot) => {
+      const evalData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setEvaluaciones(evalData);
+    });
+
+    return () => {
+      unsubscribeLogs();
+      unsubscribeEval();
+    };
   }, [user, isAdmin]);
 
   const registrarAuditoria = async (accion: string) => {
@@ -114,9 +114,6 @@ export default function AdminDashboard() {
   };
   const handleLogout = async () => { await signOut(auth); };
 
-  // ==========================================================
-  // LÓGICA DE OPERACIONES
-  // ==========================================================
   const generarEnlaceWA = (cita: any) => {
     const num = cita.telefono.replace(/\D/g, ''); 
     const prefijo = num.length === 8 ? '591' : '';
@@ -183,9 +180,6 @@ export default function AdminDashboard() {
     document.body.appendChild(link); link.click(); document.body.removeChild(link);
   };
 
-  // ==========================================================
-  // GENERADORES DE PDF
-  // ==========================================================
   const generarPDFIngreso = (cita: any) => {
     const doc = new jsPDF();
     doc.setTextColor(240, 248, 255); doc.setFontSize(70); doc.setFont("helvetica", "bold"); doc.text("OMNITECH", 105, 160, { align: "center", angle: 45 });
@@ -237,9 +231,6 @@ export default function AdminDashboard() {
   const adelantosFlotantes = citas.reduce((acc, c) => (c.estado !== "Completado" && c.adelantoRealizado && c.montoAdelanto) ? acc + parseFloat(c.montoAdelanto) : acc, 0);
   const citasFiltradas = citas.filter(cita => cita.nombre.toLowerCase().includes(searchTerm.toLowerCase()) || cita.id.toLowerCase().includes(searchTerm.toLowerCase()));
 
-  // ==========================================
-  // PANTALLAS DE CARGA Y AUTENTICACIÓN
-  // ==========================================
   if (authChecking) return <div className="min-h-screen bg-[#030712] flex items-center justify-center"><p className="text-cyan-500 font-mono animate-pulse tracking-widest">[ VERIFICANDO CREDENCIALES... ]</p></div>;
   if (!user) { 
     return ( 
@@ -267,9 +258,6 @@ export default function AdminDashboard() {
     ); 
   }
 
-  // ==========================================
-  // PANEL PRINCIPAL
-  // ==========================================
   return (
     <main className="min-h-screen bg-[#030712] text-white p-4 md:p-8 font-sans selection:bg-cyan-500 relative">
       <div className="fixed inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px] pointer-events-none z-0"></div>
@@ -278,8 +266,6 @@ export default function AdminDashboard() {
       </div>
 
       <div className="max-w-[1400px] mx-auto relative z-10">
-        
-        {/* Cabecera renombrada */}
         <header className="flex flex-col md:flex-row justify-between items-center bg-[#0a1120]/90 border border-slate-800 p-6 rounded-2xl backdrop-blur-xl mb-6 shadow-[0_0_30px_rgba(34,211,238,0.1)]">
           <div>
             <h1 className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-600 tracking-wider uppercase">
@@ -293,19 +279,15 @@ export default function AdminDashboard() {
             </p>
           </div>
           <div className="mt-4 md:mt-0 flex items-center space-x-4">
-            {/* ====== NUEVO BOTÓN DEL RADAR ====== */}
             <Link href="/radar" className="px-4 py-2 border border-cyan-500/50 text-cyan-400 hover:bg-cyan-900/30 rounded-lg text-xs font-bold tracking-widest transition-all shadow-[0_0_15px_rgba(34,211,238,0.2)] flex items-center">
               <span className="w-2 h-2 bg-red-500 rounded-full animate-ping mr-2"></span>
               RADAR NOC
             </Link>
-            {/* ================================================ */}
             
-            {/* ====== NUEVO BOTÓN DE LA ACADEMIA AÑADIDO AQUÍ ====== */}
             <Link href="/academia" className="px-4 py-2 border border-emerald-500/50 text-emerald-400 hover:bg-emerald-900/30 rounded-lg text-xs font-bold tracking-widest transition-all shadow-[0_0_15px_rgba(16,185,129,0.2)] flex items-center">
               <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 14l9-5-9-5-9 5 9 5z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z"></path></svg>
               ACADEMIA
             </Link>
-            {/* ================================================ */}
 
             <div className="flex items-center bg-[#030712] border border-cyan-900/50 px-4 py-2 rounded-lg">
               <div className="w-3 h-3 bg-green-500 rounded-full animate-ping mr-3"></div><span className="text-green-400 text-sm font-bold tracking-widest">{user.email}</span>
@@ -314,18 +296,17 @@ export default function AdminDashboard() {
           </div>
         </header>
 
-        {/* Pestañas */}
         <div className="flex space-x-2 mb-6 bg-[#0a1120]/80 p-1.5 rounded-xl border border-slate-800 w-full md:w-max backdrop-blur-md overflow-x-auto">
           <button onClick={() => setActiveTab("monitoreo")} className={`px-6 py-3 rounded-lg text-xs font-bold tracking-widest transition-all whitespace-nowrap ${activeTab === "monitoreo" ? "bg-cyan-600/20 text-cyan-400 border border-cyan-500/30 shadow-[0_0_15px_rgba(34,211,238,0.15)]" : "text-slate-500 hover:text-slate-300"}`}>MONITOREO NOC</button>
           {isAdmin && (
             <>
               <button onClick={() => setActiveTab("analitica")} className={`px-6 py-3 rounded-lg text-xs font-bold tracking-widest transition-all whitespace-nowrap ${activeTab === "analitica" ? "bg-purple-600/20 text-purple-400 border border-purple-500/30 shadow-[0_0_15px_rgba(168,85,247,0.15)]" : "text-slate-500 hover:text-slate-300"}`}>ANALÍTICA FINANCIERA</button>
+              <button onClick={() => setActiveTab("evaluaciones")} className={`px-6 py-3 rounded-lg text-xs font-bold tracking-widest transition-all whitespace-nowrap ${activeTab === "evaluaciones" ? "bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 shadow-[0_0_15px_rgba(16,185,129,0.15)]" : "text-slate-500 hover:text-slate-300"}`}>EVALUACIÓN TÉCNICA</button>
               <button onClick={() => setActiveTab("configuracion")} className={`px-6 py-3 rounded-lg text-xs font-bold tracking-widest transition-all whitespace-nowrap ${activeTab === "configuracion" ? "bg-amber-600/20 text-amber-400 border border-amber-500/30 shadow-[0_0_15px_rgba(245,158,11,0.15)]" : "text-slate-500 hover:text-slate-300"}`}>SALA DE CONTROL</button>
             </>
           )}
         </div>
 
-        {/* PESTAÑA: MONITOREO */}
         {activeTab === "monitoreo" && (
           <div className="animate-fade-in-up">
             <div className="mb-4 flex flex-col sm:flex-row items-center justify-between bg-[#0a1120]/80 p-4 rounded-2xl border border-cyan-900/40 backdrop-blur-md shadow-lg gap-4">
@@ -458,7 +439,6 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* VISTA 2: ANALÍTICA */}
         {isAdmin && activeTab === "analitica" && (
           <div className="animate-fade-in-up space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -492,7 +472,70 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* VISTA 3: CONFIGURACIONES */}
+        {/* VISTA NUEVA: EVALUACIONES TÉCNICAS (MATRIZ DE COMPETENCIAS) */}
+        {isAdmin && activeTab === "evaluaciones" && (
+          <div className="animate-fade-in-up bg-[#0a1120]/80 rounded-2xl border border-emerald-500/30 p-6 backdrop-blur-md shadow-2xl">
+            <div className="flex items-center justify-between mb-6 border-b border-slate-800 pb-4">
+              <h2 className="text-xl font-black text-emerald-400 tracking-widest uppercase flex items-center">
+                <svg className="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                MATRIZ DE COMPETENCIAS TÉCNICAS
+              </h2>
+              <span className="bg-emerald-950/50 text-emerald-400 border border-emerald-900/50 px-3 py-1 rounded text-xs font-mono font-bold">
+                AUDITORÍA ACADÉMICA
+              </span>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-slate-900/80 border-b border-slate-800 text-emerald-400 uppercase text-[10px] font-black tracking-widest">
+                    <th className="p-4">Técnico Evalúado</th>
+                    <th className="p-4">Caso Asignado</th>
+                    <th className="p-4">Opción Seleccionada</th>
+                    <th className="p-4">Puntaje</th>
+                    <th className="p-4">Estado de Competencia</th>
+                    <th className="p-4">Fecha de Registro</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/50 text-xs font-mono">
+                  {evaluaciones.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="p-8 text-center text-slate-500">
+                        No hay evaluaciones registradas en el sistema aún.
+                      </td>
+                    </tr>
+                  ) : (
+                    evaluaciones.map((ev) => (
+                      <tr key={ev.id} className="hover:bg-slate-800/30 transition-colors">
+                        <td className="p-4 font-bold text-white">{ev.tecnico}</td>
+                        <td className="p-4 text-slate-400">{ev.casoId}</td>
+                        <td className="p-4">
+                          <span className="bg-slate-900 border border-slate-700 px-2 py-1 rounded text-cyan-400 font-bold">
+                            Opción {ev.respuestaElegida}
+                          </span>
+                        </td>
+                        <td className="p-4 font-bold text-white">{ev.puntaje} / 100</td>
+                        <td className="p-4">
+                          <span className={`px-2 py-1 rounded text-[10px] font-black tracking-wider border ${
+                            ev.estadoCompetencia === "Aprobado"
+                              ? "bg-emerald-950/50 border-emerald-500/50 text-emerald-400"
+                              : "bg-red-950/50 border-red-500/50 text-red-400"
+                          }`}>
+                            {ev.estadoCompetencia ? ev.estadoCompetencia.toUpperCase() : "PENDIENTE"}
+                          </span>
+                        </td>
+                        <td className="p-4 text-slate-500">
+                          {new Date(ev.fechaEvaluacion).toLocaleString()}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
         {isAdmin && activeTab === "configuracion" && ( 
           <div className="animate-fade-in-up grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="bg-[#0a1120]/80 p-6 rounded-2xl border border-amber-500/30 backdrop-blur-md shadow-[0_0_20px_rgba(245,158,11,0.1)]">
@@ -533,14 +576,9 @@ export default function AdminDashboard() {
         )}
       </div>
 
-      {/* ========================================================= */}
-      {/* MODAL DE CIERRE CON BOTÓN "VOLVER ATRÁS" (X y Botón) */}
-      {/* ========================================================= */}
       {showCloseModal && citaActiva && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#030712]/95 backdrop-blur-xl">
           <div className="bg-[#0a1120] border border-cyan-500/50 p-6 rounded-2xl max-w-lg w-full shadow-[0_0_80px_rgba(34,211,238,0.2)] transform animate-fade-in-up relative">
-            
-            {/* BOTÓN X PARA CERRAR RÁPIDO */}
             <button 
               onClick={() => setShowCloseModal(false)}
               className="absolute top-4 right-4 text-slate-500 hover:text-red-500 transition-colors focus:outline-none"
@@ -577,7 +615,6 @@ export default function AdminDashboard() {
               </div>
               
               <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-4 pt-4 mt-4 border-t border-slate-800">
-                {/* BOTÓN VOLVER ATRÁS MEJORADO */}
                 <button 
                   onClick={() => setShowCloseModal(false)} 
                   className="flex-1 py-3 rounded-lg border border-slate-700 text-slate-400 font-bold hover:bg-slate-800 hover:text-white transition-all text-xs tracking-widest flex items-center justify-center"
