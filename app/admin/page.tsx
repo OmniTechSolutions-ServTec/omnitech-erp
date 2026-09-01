@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import Link from "next/link"; // IMPORTACIÓN AÑADIDA PARA EL ENLACE AL RADAR
+import Link from "next/link"; 
 import { collection, query, orderBy, onSnapshot, doc, updateDoc, addDoc } from "firebase/firestore";
 import { signInWithEmailAndPassword, onAuthStateChanged, signOut } from "firebase/auth";
 import { db, auth } from "../../firebase"; 
@@ -293,13 +293,20 @@ export default function AdminDashboard() {
             </p>
           </div>
           <div className="mt-4 md:mt-0 flex items-center space-x-4">
-            {/* ====== NUEVO BOTÓN DEL RADAR AÑADIDO AQUÍ ====== */}
+            {/* ====== NUEVO BOTÓN DEL RADAR ====== */}
             <Link href="/radar" className="px-4 py-2 border border-cyan-500/50 text-cyan-400 hover:bg-cyan-900/30 rounded-lg text-xs font-bold tracking-widest transition-all shadow-[0_0_15px_rgba(34,211,238,0.2)] flex items-center">
               <span className="w-2 h-2 bg-red-500 rounded-full animate-ping mr-2"></span>
               RADAR NOC
             </Link>
             {/* ================================================ */}
             
+            {/* ====== NUEVO BOTÓN DE LA ACADEMIA AÑADIDO AQUÍ ====== */}
+            <Link href="/academia" className="px-4 py-2 border border-emerald-500/50 text-emerald-400 hover:bg-emerald-900/30 rounded-lg text-xs font-bold tracking-widest transition-all shadow-[0_0_15px_rgba(16,185,129,0.2)] flex items-center">
+              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 14l9-5-9-5-9 5 9 5z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z"></path></svg>
+              ACADEMIA
+            </Link>
+            {/* ================================================ */}
+
             <div className="flex items-center bg-[#030712] border border-cyan-900/50 px-4 py-2 rounded-lg">
               <div className="w-3 h-3 bg-green-500 rounded-full animate-ping mr-3"></div><span className="text-green-400 text-sm font-bold tracking-widest">{user.email}</span>
             </div>
