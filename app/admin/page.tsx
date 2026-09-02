@@ -6,7 +6,6 @@ import { signInWithEmailAndPassword, onAuthStateChanged, signOut } from "firebas
 import { db, auth } from "../../firebase"; 
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import QRCode from "qrcode"; // NUEVO MOTOR CRIPTOGRÁFICO
 
 export default function AdminDashboard() {
   const [user, setUser] = useState<any>(null);
@@ -180,9 +179,22 @@ export default function AdminDashboard() {
     document.body.appendChild(link); link.click(); document.body.removeChild(link);
   };
 
+// ==========================================================
+  // GENERADORES DE PDF CRIPTOGRÁFICOS (VÍA API NATIVA CLOUD)
   // ==========================================================
-  // GENERADORES DE PDF CRIPTOGRÁFICOS
-  // ==========================================================
+  
+  // Función táctica para convertir el QR de la nube a formato Base64 (Requerido por jsPDF)
+  const getBase64ImageFromUrl = async (imageUrl: string): Promise<string> => {
+    const res = await fetch(imageUrl);
+    const blob = await res.blob();
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  };
+
   const generarPDFIngreso = async (cita: any) => {
     const doc = new jsPDF();
     doc.setTextColor(240, 248, 255); doc.setFontSize(70); doc.setFont("helvetica", "bold"); doc.text("OMNITECH", 105, 160, { align: "center", angle: 45 });
@@ -202,6 +214,54 @@ export default function AdminDashboard() {
     } else { 
       doc.setTextColor(220, 38, 38); doc.text("ESTADO: PAGO PENDIENTE", 14, finalY + 8); 
     }
+
+    // INYECCIÓN DE SELLO QR CLOUD
+    try {
+      const qrData = encodeURIComponent(`OMNITECH AUTHENTIC\nTICKET: ${cita.id}\nCLIENTE: ${cita.nombre}\nFECHA: ${cita.fecha}\nESTADO: ${cita.estado.toUpperCase()}`);
+      const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${qrData}`;
+      const base64QR = await getBase64ImageFromUrl(qrUrl);
+      
+      doc.addImage(base64QR, 'PNG', 165, 245, 30, 30);
+      doc.setFontSize(6); doc.setTextColor(100); doc.text("SELLO CRIPTOGRÁFICO", 180, 278, { align: "center" });
+    } catch (err) { console.error("Error inyectando el QR:", err); }
+
+    doc.save(`OmniTech_Ingreso_${cita.nombre.replace(/\s+/g, '_')}.pdf`);
+  };
+
+  const generarPDFEntrega = async (cita: any) => {
+    const doc = new jsPDF();
+    const costoFinal = parseFloat(cita.costoFinal || "0"); const adelanto = parseFloat(cita.montoAdelanto || "0"); const saldo = costoFinal - adelanto;
+    doc.setFillColor(10, 17, 32); doc.rect(0, 0, 210, 45, 'F'); doc.setTextColor(34, 211, 238); doc.setFontSize(22); doc.setFont("helvetica", "black"); doc.text("OMNITECH SOLUTIONS", 105, 20, { align: "center" });
+    doc.setTextColor(255, 255, 255); doc.setFontSize(10); doc.setFont("helvetica", "normal"); doc.text("COMPROBANTE DE FINALIZACIÓN", 105, 28, { align: "center" });
+    doc.setFontSize(8); doc.setTextColor(148, 163, 184); doc.text(`TICKET ID: ${cita.id.toUpperCase()} | MODALIDAD: ${cita.modalidad.toUpperCase()}`, 105, 36, { align: "center" });
+    doc.setTextColor(0, 0, 0); doc.setFontSize(10); doc.setFont("helvetica", "bold"); doc.text(`CLIENTE: ${cita.nombre}`, 14, 55); doc.setFont("helvetica", "normal"); doc.text(`FECHA DE CIERRE: ${new Date().toLocaleDateString()}`, 14, 62);
+    autoTable(doc, { startY: 70, headStyles: { fillColor: [16, 185, 129], textColor: [0, 0, 0], fontStyle: 'bold' }, head: [['TRABAJO TÉCNICO REALIZADO']], body: [[cita.trabajoFinal]], theme: 'grid' });
+    const finalY = (doc as any).lastAutoTable.finalY + 15; doc.setFontSize(11); doc.setFont("helvetica", "bold"); doc.text("LIQUIDACIÓN FINANCIERA", 14, finalY); doc.setFontSize(10); doc.setFont("helvetica", "normal");
+    doc.text(`Costo Total:`, 14, finalY + 8); doc.text(`${costoFinal.toFixed(2)} Bs.`, 80, finalY + 8); doc.text(`Adelanto Registrado:`, 14, finalY + 15); doc.text(`- ${adelanto.toFixed(2)} Bs.`, 80, finalY + 15);
+    doc.setFont("helvetica", "bold"); doc.text(`SALDO A PAGAR:`, 14, finalY + 25); doc.setFontSize(14); doc.setTextColor(220, 38, 38); doc.text(`${saldo > 0 ? saldo.toFixed(2) : "0.00"} Bs.`, 80, finalY + 25);
+    doc.setTextColor(0, 0, 0);
+    
+    if (cita.modalidad === "En Domicilio") {
+      doc.setFillColor(240, 248, 255); doc.rect(14, finalY + 40, 182, 25, 'F'); doc.setFontSize(9); doc.text("VALIDACIÓN DE CONFORMIDAD DEL CLIENTE", 105, finalY + 47, { align: "center" });
+      doc.setFont("helvetica", "normal"); doc.text("Conformidad digital gestionada vía plataforma segura.", 105, finalY + 54, { align: "center" });
+      doc.text(`Estado de Firma: ${cita.conformidadDigital ? cita.conformidadDigital.toUpperCase() : "PENDIENTE"}`, 105, finalY + 59, { align: "center" });
+    } else { 
+      doc.setDrawColor(100); doc.line(20, 260, 90, 260); doc.text("Firma del Cliente (Laboratorio)", 55, 265, { align: "center" }); 
+    }
+    doc.setDrawColor(100); doc.line(120, 260, 190, 260); doc.setFontSize(11); doc.setFont("helvetica", "bold"); doc.text("Miguel Angel Cuenca", 155, 265, { align: "center" }); doc.setFontSize(9); doc.setFont("helvetica", "normal"); doc.text("Firma Autorizada", 155, 270, { align: "center" });
+
+    // INYECCIÓN DE SELLO QR CLOUD FINAL
+    try {
+      const qrData = encodeURIComponent(`OMNITECH FINALIZADO\nTICKET: ${cita.id}\nCLIENTE: ${cita.nombre}\nCOSTO FINAL: ${costoFinal} Bs\nFECHA CIERRE: ${new Date().toLocaleDateString()}`);
+      const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${qrData}`;
+      const base64QR = await getBase64ImageFromUrl(qrUrl);
+      
+      doc.addImage(base64QR, 'PNG', 10, 275, 20, 20); 
+      doc.setFontSize(5); doc.setTextColor(150); doc.text("HASH DE AUDITORÍA", 20, 297, { align: "center" });
+    } catch (err) { console.error("Error inyectando el QR:", err); }
+
+    doc.save(`OmniTech_Entrega_${cita.nombre.replace(/\s+/g, '_')}.pdf`);
+  };
 
     // INYECCIÓN DE SELLO QR INGRESO
     try {
