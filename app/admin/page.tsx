@@ -6,6 +6,7 @@ import { signInWithEmailAndPassword, onAuthStateChanged, signOut } from "firebas
 import { db, auth } from "../../firebase"; 
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import QRCode from "qrcode"; // NUEVO MOTOR CRIPTOGRÁFICO
 
 export default function AdminDashboard() {
   const [user, setUser] = useState<any>(null);
@@ -15,7 +16,6 @@ export default function AdminDashboard() {
   const [loginError, setLoginError] = useState("");
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
-  // === SEGURIDAD MAESTRA ===
   const ADMIN_EMAIL = "omnitech.servtec@gmail.com"; 
   const isAdmin = user?.email === ADMIN_EMAIL;
 
@@ -180,7 +180,10 @@ export default function AdminDashboard() {
     document.body.appendChild(link); link.click(); document.body.removeChild(link);
   };
 
-  const generarPDFIngreso = (cita: any) => {
+  // ==========================================================
+  // GENERADORES DE PDF CRIPTOGRÁFICOS
+  // ==========================================================
+  const generarPDFIngreso = async (cita: any) => {
     const doc = new jsPDF();
     doc.setTextColor(240, 248, 255); doc.setFontSize(70); doc.setFont("helvetica", "bold"); doc.text("OMNITECH", 105, 160, { align: "center", angle: 45 });
     doc.setFillColor(3, 7, 18); doc.rect(0, 0, 210, 45, 'F'); doc.setDrawColor(34, 211, 238); doc.setLineWidth(1); doc.line(0, 45, 210, 45);
@@ -192,16 +195,26 @@ export default function AdminDashboard() {
     doc.text(`Lugar: ${cita.direccion || "No especificado"}`, 14, 82); doc.text(`Programación: ${cita.fecha} | ${cita.hora}`, 14, 89);
     autoTable(doc, { startY: 95, headStyles: { fillColor: [10, 17, 32], textColor: [34, 211, 238], fontStyle: 'bold' }, head: [['FALLA REPORTADA (Diagnóstico Inicial)']], body: [[cita.descripcion]], theme: 'grid' });
     const finalY = (doc as any).lastAutoTable.finalY + 15; doc.setFontSize(11); doc.setFont("helvetica", "bold"); doc.text("ESTADO FINANCIERO", 14, finalY);
+    
     if (cita.adelantoRealizado) { 
       doc.setTextColor(16, 185, 129); doc.text(`ADELANTO CONFIRMADO: ${cita.montoAdelanto} Bs.`, 14, finalY + 8); 
       doc.setTextColor(0, 0, 0); doc.setFontSize(10); doc.setFont("helvetica", "normal"); doc.text(`Referencia: ${cita.nroComprobante}`, 14, finalY + 15); 
     } else { 
       doc.setTextColor(220, 38, 38); doc.text("ESTADO: PAGO PENDIENTE", 14, finalY + 8); 
     }
+
+    // INYECCIÓN DE SELLO QR INGRESO
+    try {
+      const qrData = `OMNITECH AUTHENTIC\nTICKET: ${cita.id}\nCLIENTE: ${cita.nombre}\nFECHA: ${cita.fecha}\nESTADO: ${cita.estado.toUpperCase()}`;
+      const qrImage = await QRCode.toDataURL(qrData, { errorCorrectionLevel: 'H', type: 'image/png' });
+      doc.addImage(qrImage, 'PNG', 165, 245, 30, 30);
+      doc.setFontSize(6); doc.setTextColor(100); doc.text("SELLO CRIPTOGRÁFICO", 180, 278, { align: "center" });
+    } catch (err) { console.error("Error generando QR", err); }
+
     doc.save(`OmniTech_Ingreso_${cita.nombre.replace(/\s+/g, '_')}.pdf`);
   };
 
-  const generarPDFEntrega = (cita: any) => {
+  const generarPDFEntrega = async (cita: any) => {
     const doc = new jsPDF();
     const costoFinal = parseFloat(cita.costoFinal || "0"); const adelanto = parseFloat(cita.montoAdelanto || "0"); const saldo = costoFinal - adelanto;
     doc.setFillColor(10, 17, 32); doc.rect(0, 0, 210, 45, 'F'); doc.setTextColor(34, 211, 238); doc.setFontSize(22); doc.setFont("helvetica", "black"); doc.text("OMNITECH SOLUTIONS", 105, 20, { align: "center" });
@@ -213,6 +226,7 @@ export default function AdminDashboard() {
     doc.text(`Costo Total:`, 14, finalY + 8); doc.text(`${costoFinal.toFixed(2)} Bs.`, 80, finalY + 8); doc.text(`Adelanto Registrado:`, 14, finalY + 15); doc.text(`- ${adelanto.toFixed(2)} Bs.`, 80, finalY + 15);
     doc.setFont("helvetica", "bold"); doc.text(`SALDO A PAGAR:`, 14, finalY + 25); doc.setFontSize(14); doc.setTextColor(220, 38, 38); doc.text(`${saldo > 0 ? saldo.toFixed(2) : "0.00"} Bs.`, 80, finalY + 25);
     doc.setTextColor(0, 0, 0);
+    
     if (cita.modalidad === "En Domicilio") {
       doc.setFillColor(240, 248, 255); doc.rect(14, finalY + 40, 182, 25, 'F'); doc.setFontSize(9); doc.text("VALIDACIÓN DE CONFORMIDAD DEL CLIENTE", 105, finalY + 47, { align: "center" });
       doc.setFont("helvetica", "normal"); doc.text("Conformidad digital gestionada vía plataforma segura.", 105, finalY + 54, { align: "center" });
@@ -221,15 +235,18 @@ export default function AdminDashboard() {
       doc.setDrawColor(100); doc.line(20, 260, 90, 260); doc.text("Firma del Cliente (Laboratorio)", 55, 265, { align: "center" }); 
     }
     doc.setDrawColor(100); doc.line(120, 260, 190, 260); doc.setFontSize(11); doc.setFont("helvetica", "bold"); doc.text("Miguel Angel Cuenca", 155, 265, { align: "center" }); doc.setFontSize(9); doc.setFont("helvetica", "normal"); doc.text("Firma Autorizada", 155, 270, { align: "center" });
+
+    // INYECCIÓN DE SELLO QR ENTREGA FINAL
+    try {
+      const qrData = `OMNITECH FINALIZADO\nTICKET: ${cita.id}\nCLIENTE: ${cita.nombre}\nCOSTO FINAL: ${costoFinal} Bs\nFECHA CIERRE: ${new Date().toLocaleDateString()}`;
+      const qrImage = await QRCode.toDataURL(qrData, { errorCorrectionLevel: 'H', type: 'image/png' });
+      // Colocamos el QR en la esquina inferior izquierda
+      doc.addImage(qrImage, 'PNG', 10, 275, 20, 20); 
+      doc.setFontSize(5); doc.setTextColor(150); doc.text("HASH DE AUDITORÍA", 20, 297, { align: "center" });
+    } catch (err) { console.error("Error generando QR", err); }
+
     doc.save(`OmniTech_Entrega_${cita.nombre.replace(/\s+/g, '_')}.pdf`);
   };
-
-  const totalTickets = citas.length;
-  const ticketsCompletados = citas.filter(c => c.estado === "Completado").length;
-  const porcentajeExito = totalTickets === 0 ? 0 : Math.round((ticketsCompletados / totalTickets) * 100);
-  const ingresosTotales = citas.reduce((acc, c) => (c.estado === "Completado" && c.costoFinal) ? acc + parseFloat(c.costoFinal) : acc, 0);
-  const adelantosFlotantes = citas.reduce((acc, c) => (c.estado !== "Completado" && c.adelantoRealizado && c.montoAdelanto) ? acc + parseFloat(c.montoAdelanto) : acc, 0);
-  const citasFiltradas = citas.filter(cita => cita.nombre.toLowerCase().includes(searchTerm.toLowerCase()) || cita.id.toLowerCase().includes(searchTerm.toLowerCase()));
 
   if (authChecking) return <div className="min-h-screen bg-[#030712] flex items-center justify-center"><p className="text-cyan-500 font-mono animate-pulse tracking-widest">[ VERIFICANDO CREDENCIALES... ]</p></div>;
   if (!user) { 
@@ -339,7 +356,6 @@ export default function AdminDashboard() {
                     ) : (
                       citasFiltradas.map((cita) => (
                         <tr key={cita.id} className="hover:bg-slate-800/30 transition-colors group">
-                          
                           <td className="p-4">
                             <p className="font-bold text-white text-base mb-1">{cita.nombre}</p>
                             <div className="flex items-center space-x-2 mb-2 bg-[#030712] border border-slate-800 rounded px-2 py-1 w-max cursor-pointer hover:border-cyan-500 transition-colors" onClick={() => copiarID(cita.id)}>
@@ -357,9 +373,7 @@ export default function AdminDashboard() {
                               ) : <span className="text-[10px] text-slate-500">Dir: {cita.direccion || "N/A"}</span>}
                             </div>
                           </td>
-                          
                           <td className="p-4"><p className="text-slate-300 text-sm max-w-xs truncate group-hover:whitespace-normal transition-all">{cita.descripcion}</p></td>
-
                           {isAdmin && (
                             <td className="p-4">
                               {cita.adelantoRealizado ? (
@@ -373,14 +387,12 @@ export default function AdminDashboard() {
                               )}
                             </td>
                           )}
-                          
                           <td className="p-4">
                             <span className={`px-3 py-1.5 rounded text-[10px] font-black tracking-wider border block w-max mb-2 ${
                               cita.estado === "Pendiente" ? "bg-amber-950/50 border-amber-500/50 text-amber-400" :
                               cita.estado === "En Reparación" ? "bg-blue-950/50 border-blue-500/50 text-blue-400" :
                               "bg-emerald-950/50 border-emerald-500/50 text-emerald-400"
                             }`}>{cita.estado ? cita.estado.toUpperCase() : "PENDIENTE"}</span>
-                            
                             {cita.estado === "Completado" && (
                               <div className="mb-2">
                                 {cita.modalidad === "En Domicilio" ? (
@@ -412,14 +424,12 @@ export default function AdminDashboard() {
                                 )}
                               </div>
                             )}
-
                             <select className="block w-full bg-[#030712] border border-slate-700 text-slate-300 text-[10px] rounded px-1 py-1 focus:outline-none focus:border-cyan-500 cursor-pointer" value={cita.estado || "Pendiente"} onChange={(e) => handleEstadoChange(cita, e.target.value)}>
                               <option value="Pendiente">Marcar Pendiente</option>
                               <option value="En Reparación">Iniciar Reparación</option>
                               <option value="Completado">Finalizar Equipo</option>
                             </select>
                           </td>
-                          
                           <td className="p-4 text-center space-y-2">
                             <a href={generarEnlaceWA(cita)} target="_blank" rel="noopener noreferrer" className="w-full bg-green-600/20 hover:bg-green-500 hover:text-black text-green-400 text-[10px] font-bold px-3 py-2 rounded transition-all border border-green-500/30 flex items-center justify-center text-center">
                               {cita.estado === "Completado" ? (cita.modalidad === "En Domicilio" ? "ENVIAR ENLACE FIRMA" : "AVISO EQUIPO LISTO") : "CONTACTAR (WA)"}
@@ -472,7 +482,6 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* VISTA NUEVA: EVALUACIONES TÉCNICAS (MATRIZ DE COMPETENCIAS) */}
         {isAdmin && activeTab === "evaluaciones" && (
           <div className="animate-fade-in-up bg-[#0a1120]/80 rounded-2xl border border-emerald-500/30 p-6 backdrop-blur-md shadow-2xl">
             <div className="flex items-center justify-between mb-6 border-b border-slate-800 pb-4">
