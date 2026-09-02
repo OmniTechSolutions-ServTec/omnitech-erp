@@ -110,19 +110,20 @@ export default function AdminDashboard() {
   };
   const handleLogout = async () => { await signOut(auth); };
 
-  const generarEnlaceWA = (cita: any) => {
+  // ==========================================================
+  // WHATSAPP: MENÚ DESPLEGABLE CON OPCIONES DE INGRESO Y FINALIZADO
+  // ==========================================================
+  const generarEnlaceWA = (cita: any, tipo: 'ingreso' | 'finalizado') => {
     const num = cita.telefono.replace(/\D/g, ''); 
     const prefijo = num.length === 8 ? '591' : '';
     let texto = "";
-    if (cita.estado === "Completado") {
-      if (cita.modalidad === "En Domicilio") { 
-        texto = `Hola ${cita.nombre}, el trabajo técnico ha concluido. Por favor firme su conformidad y califique nuestro servicio aquí:\n👉 ${window.location.origin}/firma/${cita.id}`; 
-      } else { 
-        texto = `Hola ${cita.nombre}, su equipo está listo en nuestro Centro de Operaciones. Ya puede pasar a recogerlo.`; 
-      }
-    } else { 
-      texto = `Hola ${cita.nombre}, nos comunicamos de OmniTech Solutions respecto a su solicitud técnica.`; 
+
+    if (tipo === 'ingreso') {
+      texto = `Hola ${cita.nombre}, nos comunicamos de *OmniTech Solutions*.\n\nSu solicitud ha sido registrada exitosamente en nuestra Sala de Control. En un momento le adjuntaremos su *Comprobante de Servicio Solicitado* en formato PDF para su respaldo.\n\nID del Ticket: *${cita.id.toUpperCase()}*\n\n¡Gracias por elegirnos, estamos a su servicio!`;
+    } else {
+      texto = `Hola ${cita.nombre}, le informamos desde *OmniTech Solutions* que el servicio técnico en su equipo ha concluido con éxito.\n\nEn un momento le enviaremos su *Certificado de Finalización Operativa* (PDF) con el detalle del trabajo y saldos.\n\nQuedamos a su entera disposición.`;
     }
+    
     return `https://wa.me/${prefijo}${num}?text=${encodeURIComponent(texto)}`;
   };
 
@@ -195,35 +196,26 @@ export default function AdminDashboard() {
     });
   };
 
-  // Funciones de Arte Tecnológico
   const drawHUDCorners = (doc: any, x: number, y: number, w: number, h: number, color: number[]) => {
     doc.setDrawColor(color[0], color[1], color[2]);
     doc.setLineWidth(0.4);
     const l = 4;
-    doc.line(x, y, x + l, y); doc.line(x, y, x, y + l); // Arriba-Izquierda
-    doc.line(x + w, y, x + w - l, y); doc.line(x + w, y, x + w, y + l); // Arriba-Derecha
-    doc.line(x, y + h, x + l, y + h); doc.line(x, y + h, x, y + h - l); // Abajo-Izquierda
-    doc.line(x + w, y + h, x + w - l, y + h); doc.line(x + w, y + h, x + w, y + h - l); // Abajo-Derecha
+    doc.line(x, y, x + l, y); doc.line(x, y, x, y + l); 
+    doc.line(x + w, y, x + w - l, y); doc.line(x + w, y, x + w, y + l); 
+    doc.line(x, y + h, x + l, y + h); doc.line(x, y + h, x, y + h - l); 
+    doc.line(x + w, y + h, x + w - l, y + h); doc.line(x + w, y + h, x + w, y + h - l); 
   };
 
-  const drawCyberBarcode = (doc: any, x: number, y: number, color: number[]) => {
-    doc.setFillColor(color[0], color[1], color[2]);
-    const bars = [1, 0.5, 2, 0.5, 1, 3, 0.5, 1, 1.5, 0.5, 2, 1];
-    let curX = x;
-    bars.forEach(b => { doc.rect(curX, y, b, 5, 'F'); curX += b + 0.8; });
-  };
-
+  // 1. PDF DE INGRESO
   const generarPDFIngreso = async (cita: any) => {
     const doc = new jsPDF();
     const telLimpio = sanitizarTelefono(cita.telefono);
 
-    // 1. CABECERA ÉPICA
-    doc.setFillColor(6, 11, 25); // Negro Abisal
+    // Cabecera Épica (Sin códigos de barra)
+    doc.setFillColor(6, 11, 25); 
     doc.rect(0, 0, 210, 50, 'F');
-    doc.setFillColor(34, 211, 238); // Línea Cian Neón Gruesa
+    doc.setFillColor(34, 211, 238); // Cian
     doc.rect(0, 50, 210, 2, 'F');
-
-    drawCyberBarcode(doc, 14, 10, [34, 211, 238]);
 
     doc.setTextColor(34, 211, 238);
     doc.setFontSize(28);
@@ -233,19 +225,19 @@ export default function AdminDashboard() {
     doc.setTextColor(148, 163, 184);
     doc.setFontSize(10);
     doc.setFont("helvetica", "normal");
-    doc.text("PROTOCOLO DE INGRESO OPERATIVO", 105, 32, { align: "center" });
+    doc.text("COMPROBANTE DE SERVICIO SOLICITADO", 105, 32, { align: "center" }); // TEXTO CORREGIDO
 
-    // ID Badge estilo Sistema
+    // ID Badge
     doc.setFillColor(15, 23, 42); 
     doc.setDrawColor(34, 211, 238);
     doc.setLineWidth(0.3);
     doc.roundedRect(65, 38, 80, 7, 1, 1, 'FD');
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(8);
-    doc.setFont("courier", "bold"); // Tipografía Hacker
+    doc.setFont("courier", "bold"); 
     doc.text(`TICKET_ID :: ${cita.id.toUpperCase()}`, 105, 43, { align: "center" });
 
-    // 2. MÓDULOS DE INFORMACIÓN CON HUD
+    // HUD Datos
     doc.setFillColor(250, 252, 255);
     doc.rect(14, 62, 182, 28, 'F'); 
     drawHUDCorners(doc, 14, 62, 182, 28, [34, 211, 238]);
@@ -258,12 +250,12 @@ export default function AdminDashboard() {
     doc.setTextColor(0, 0, 0); doc.setFontSize(9);
     doc.setFont("helvetica", "bold"); doc.text("CLIENTE:", 18, 76); doc.setFont("helvetica", "normal"); doc.text(cita.nombre, 40, 76);
     doc.setFont("helvetica", "bold"); doc.text("CONTACTO:", 115, 76); doc.setFont("courier", "bold"); doc.text(telLimpio, 138, 76);
-    doc.setFont("helvetica", "bold"); doc.text("COORDENADAS:", 18, 84); 
+    doc.setFont("helvetica", "bold"); doc.text("UBICACIÓN:", 18, 84); 
     let dirBreve = cita.direccion || "No especificada";
     if (dirBreve.length > 80) dirBreve = dirBreve.substring(0, 80) + "...";
     doc.setFont("courier", "normal"); doc.text(dirBreve, 45, 84);
 
-    // 3. TABLA DE DIAGNÓSTICO
+    // Tabla
     autoTable(doc, { 
       startY: 96, 
       headStyles: { fillColor: [6, 11, 25], textColor: [34, 211, 238], fontStyle: 'bold', fontSize: 9 }, 
@@ -276,7 +268,7 @@ export default function AdminDashboard() {
 
     const finalY = (doc as any).lastAutoTable.finalY + 15; 
     
-    // 4. MÓDULO FINANCIERO INICIAL
+    // Financiero
     doc.setFillColor(245, 248, 250);
     doc.rect(14, finalY, 182, 12, 'F');
     doc.setDrawColor(34, 211, 238); doc.setLineWidth(1.5); doc.line(14, finalY, 14, finalY + 12); 
@@ -285,43 +277,41 @@ export default function AdminDashboard() {
     doc.text("ESTADO FINANCIERO:", 18, finalY + 8);
     
     if (cita.adelantoRealizado) { 
-      doc.setTextColor(16, 185, 129); doc.text(`ADELANTO CONFIRMADO: ${cita.montoAdelanto} Bs. (Hash Ref: ${cita.nroComprobante})`, 65, finalY + 8); 
+      doc.setTextColor(16, 185, 129); doc.text(`ADELANTO CONFIRMADO: ${cita.montoAdelanto} Bs. (Ref: ${cita.nroComprobante})`, 65, finalY + 8); 
     } else { 
       doc.setTextColor(220, 38, 38); doc.text(">> PAGO PENDIENTE DE ASIGNACIÓN", 65, finalY + 8); 
     }
 
-    // =========================================================
-    // 5. FOOTER PERFECTO: QR A LA IZQUIERDA, FIRMAS AL CENTRO/DERECHA
-    // =========================================================
+    // FOOTER: QR aislado a la izquierda, Firmas al centro y derecha
     const footerY = 250;
-
-    // QR Code (Aislado a la izquierda para no chocar)
-    const qrText = `[ OMNITECH SOLUTIONS - RED DE ÉLITE ]\n====================================\nID TICKET: ${cita.id}\nTITULAR: ${cita.nombre}\nFECHA: ${cita.fecha}\nESTADO: OPERACIÓN EN CURSO\n====================================\n¡Gracias por elegir OmniTech Solutions!\nInfraestructura tecnológica a su servicio.`;
+    const qrText = `[ OMNITECH SOLUTIONS - RED DE ÉLITE ]\n====================================\nTICKET: ${cita.id}\nTITULAR: ${cita.nombre}\nFECHA: ${cita.fecha}\nESTADO: REGISTRADO\n====================================\n¡Gracias por elegir OmniTech Solutions!\nInfraestructura tecnológica a su servicio.`;
     const base64QR = await generarQRBase64(qrText);
+    
     if (base64QR) {
       doc.addImage(base64QR, 'PNG', 14, footerY - 15, 32, 32);
       doc.setFontSize(6); doc.setTextColor(100); doc.setFont("courier", "bold");
       doc.text("SELLO CRIPTOGRÁFICO", 30, footerY + 21, { align: "center" });
     }
 
-    // Firma Cliente (Centro)
+    // Firma Cliente (Centro) - SIN LA PALABRA LABORATORIO
     doc.setDrawColor(100); doc.setLineWidth(0.4);
-    doc.line(70, footerY + 10, 120, footerY + 10);
+    doc.line(75, footerY + 10, 125, footerY + 10);
     doc.setTextColor(0); doc.setFontSize(9); doc.setFont("helvetica", "bold");
-    doc.text("FIRMA DEL CLIENTE", 95, footerY + 15, { align: "center" });
+    doc.text("FIRMA DEL CLIENTE", 100, footerY + 15, { align: "center" });
     doc.setFontSize(7); doc.setFont("helvetica", "normal"); doc.setTextColor(100);
-    doc.text("Conformidad de Recepción de Equipo", 95, footerY + 19, { align: "center" });
+    doc.text("Conformidad de Recepción de Equipo", 100, footerY + 19, { align: "center" });
 
     // Firma Autoridad (Derecha)
-    doc.line(140, footerY + 10, 195, footerY + 10);
+    doc.line(145, footerY + 10, 195, footerY + 10);
     doc.setTextColor(0); doc.setFontSize(9); doc.setFont("helvetica", "bold");
-    doc.text("MIGUEL ANGEL CUENCA C.", 167.5, footerY + 15, { align: "center" });
+    doc.text("MIGUEL ANGEL CUENCA C.", 170, footerY + 15, { align: "center" });
     doc.setFontSize(7); doc.setFont("helvetica", "normal"); doc.setTextColor(100);
-    doc.text("Director Operativo NOC - OmniTech", 167.5, footerY + 19, { align: "center" });
+    doc.text("Director Operativo NOC - OmniTech", 170, footerY + 19, { align: "center" });
 
     doc.save(`OmniTech_Ingreso_${cita.nombre.replace(/\s+/g, '_')}.pdf`);
   };
 
+  // 2. PDF DE ENTREGA
   const generarPDFEntrega = async (cita: any) => {
     const doc = new jsPDF();
     const costoFinal = parseFloat(cita.costoFinal || "0"); 
@@ -329,13 +319,11 @@ export default function AdminDashboard() {
     const saldo = costoFinal - adelanto;
     const telLimpio = sanitizarTelefono(cita.telefono);
 
-    // 1. CABECERA ÉPICA (ÉXITO)
+    // Cabecera Épica
     doc.setFillColor(6, 11, 25); 
     doc.rect(0, 0, 210, 50, 'F');
     doc.setFillColor(16, 185, 129); // Verde Esmeralda
     doc.rect(0, 50, 210, 2, 'F');
-
-    drawCyberBarcode(doc, 14, 10, [16, 185, 129]);
 
     doc.setTextColor(34, 211, 238);
     doc.setFontSize(28);
@@ -355,7 +343,7 @@ export default function AdminDashboard() {
     doc.setFontSize(8); doc.setFont("courier", "bold");
     doc.text(`TICKET_ID :: ${cita.id.toUpperCase()}`, 105, 43, { align: "center" });
 
-    // 2. MÓDULOS DE INFORMACIÓN
+    // HUD Datos
     doc.setFillColor(250, 252, 255);
     doc.rect(14, 62, 182, 22, 'F'); 
     drawHUDCorners(doc, 14, 62, 182, 22, [16, 185, 129]);
@@ -371,7 +359,7 @@ export default function AdminDashboard() {
     doc.setFont("helvetica", "bold"); doc.text("CIERRE NOC:", 18, 82); doc.setFont("courier", "normal"); doc.text(new Date().toLocaleDateString(), 45, 82);
     doc.setFont("helvetica", "bold"); doc.text("MODALIDAD:", 115, 82); doc.setFont("courier", "normal"); doc.text(cita.modalidad.toUpperCase(), 138, 82);
 
-    // 3. TABLA DE TRABAJO REALIZADO
+    // Tabla Trabajo Realizado
     autoTable(doc, { 
       startY: 90, 
       headStyles: { fillColor: [16, 185, 129], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9 }, 
@@ -384,7 +372,7 @@ export default function AdminDashboard() {
 
     const finalY = (doc as any).lastAutoTable.finalY + 15; 
 
-    // 4. MÓDULO FINANCIERO HUD
+    // Módulo Financiero
     doc.setFillColor(248, 250, 252);
     doc.rect(14, finalY, 182, 35, 'F');
     drawHUDCorners(doc, 14, finalY, 182, 35, [15, 23, 42]);
@@ -405,13 +393,11 @@ export default function AdminDashboard() {
     doc.setFontSize(14); doc.setTextColor(220, 38, 38); 
     doc.text(`${saldo > 0 ? saldo.toFixed(2) : "0.00"} Bs.`, 160, finalY + 33, { align: "right" });
 
-    // =========================================================
-    // 5. FOOTER PERFECTO Y FIRMAS
-    // =========================================================
+    // FOOTER
     const footerY = 250;
-
     const qrText = `[ OMNITECH SOLUTIONS - RED DE ÉLITE ]\n====================================\nID TRANSACCIÓN: ${cita.id}\nTITULAR: ${cita.nombre}\nFECHA CIERRE: ${new Date().toLocaleDateString()}\nCOSTO FINAL: ${costoFinal} Bs.\n====================================\n¡Gracias por confiar en OmniTech Solutions!\nSu seguridad e infraestructura están en las mejores manos.`;
     const base64QR = await generarQRBase64(qrText);
+    
     if (base64QR) {
       doc.addImage(base64QR, 'PNG', 14, footerY - 15, 32, 32);
       doc.setFontSize(6); doc.setTextColor(100); doc.setFont("courier", "bold");
@@ -428,27 +414,27 @@ export default function AdminDashboard() {
       doc.setTextColor(16, 185, 129); doc.setFont("courier", "bold");
       doc.text(`ESTADO DE RED: ${cita.conformidadDigital ? cita.conformidadDigital.toUpperCase() : "PENDIENTE DIGITAL"}`, 132.5, footerY + 14, { align: "center" });
     } else { 
-      // Firma Cliente (Centro)
+      // Firma Cliente (Centro) - SIN LABORATORIO
       doc.setDrawColor(100); doc.setLineWidth(0.4);
-      doc.line(70, footerY + 10, 120, footerY + 10);
+      doc.line(75, footerY + 10, 125, footerY + 10);
       doc.setTextColor(0); doc.setFontSize(9); doc.setFont("helvetica", "bold");
-      doc.text("FIRMA DEL CLIENTE", 95, footerY + 15, { align: "center" });
+      doc.text("FIRMA DEL CLIENTE", 100, footerY + 15, { align: "center" });
       doc.setFontSize(7); doc.setFont("helvetica", "normal"); doc.setTextColor(100);
-      doc.text("Conformidad de Finalización", 95, footerY + 19, { align: "center" });
+      doc.text("Conformidad de Finalización", 100, footerY + 19, { align: "center" });
 
       // Firma Autoridad (Derecha)
-      doc.line(140, footerY + 10, 195, footerY + 10);
+      doc.line(145, footerY + 10, 195, footerY + 10);
       doc.setTextColor(0); doc.setFontSize(9); doc.setFont("helvetica", "bold");
-      doc.text("MIGUEL ANGEL CUENCA C.", 167.5, footerY + 15, { align: "center" });
+      doc.text("MIGUEL ANGEL CUENCA C.", 170, footerY + 15, { align: "center" });
       doc.setFontSize(7); doc.setFont("helvetica", "normal"); doc.setTextColor(100);
-      doc.text("Director Operativo NOC - OmniTech", 167.5, footerY + 19, { align: "center" });
+      doc.text("Director Operativo NOC - OmniTech", 170, footerY + 19, { align: "center" });
     }
 
     doc.save(`OmniTech_Entrega_${cita.nombre.replace(/\s+/g, '_')}.pdf`);
   };
 
   // ==========================================
-  // RENDERIZADO DEL DASHBOARD (HTML Inalterado)
+  // RENDERIZADO DEL DASHBOARD HTML
   // ==========================================
   if (authChecking) return <div className="min-h-screen bg-[#030712] flex items-center justify-center"><p className="text-cyan-500 font-mono animate-pulse tracking-widest">[ VERIFICANDO CREDENCIALES... ]</p></div>;
   if (!user) { 
@@ -480,6 +466,7 @@ export default function AdminDashboard() {
   return (
     <main className="min-h-screen bg-[#030712] text-white p-4 md:p-8 font-sans selection:bg-cyan-500 relative">
       <div className="fixed inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px] pointer-events-none z-0"></div>
+      
       <div className="max-w-[1400px] mx-auto relative z-10">
         <header className="flex flex-col md:flex-row justify-between items-center bg-[#0a1120]/90 border border-slate-800 p-6 rounded-2xl backdrop-blur-xl mb-6 shadow-[0_0_30px_rgba(34,211,238,0.1)]">
           <div>
@@ -552,6 +539,25 @@ export default function AdminDashboard() {
                           </select>
                         </td>
                         <td className="p-4 text-center space-y-2">
+                          
+                          {/* BOTÓN WHATSAPP DESPLEGABLE */}
+                          <div className="relative group w-full">
+                            <button className="w-full bg-green-600/20 hover:bg-green-500 hover:text-black text-green-400 text-[10px] font-bold px-3 py-2 rounded transition-all border border-green-500/30 flex items-center justify-center text-center cursor-pointer shadow-[0_0_10px_rgba(34,197,94,0.1)]">
+                              <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path></svg>
+                              ENVIAR POR WA ▼
+                            </button>
+                            <div className="absolute right-0 top-full mt-1 w-full bg-[#0a1120] border border-green-500/30 rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 overflow-hidden flex flex-col">
+                              <a href={generarEnlaceWA(cita, 'ingreso')} target="_blank" rel="noopener noreferrer" className="px-3 py-3 text-[9px] font-bold text-green-400 hover:bg-green-900/50 border-b border-green-900/30 transition-colors">
+                                MSJ INGRESO
+                              </a>
+                              {cita.estado === "Completado" && (
+                                <a href={generarEnlaceWA(cita, 'finalizado')} target="_blank" rel="noopener noreferrer" className="px-3 py-3 text-[9px] font-bold text-green-400 hover:bg-green-900/50 transition-colors">
+                                  MSJ FINALIZADO
+                                </a>
+                              )}
+                            </div>
+                          </div>
+
                           <button onClick={() => generarPDFIngreso(cita)} className="w-full bg-cyan-900/30 hover:bg-cyan-600 text-cyan-400 hover:text-white text-[10px] font-bold px-3 py-2 rounded transition-all border border-cyan-700/50">PDF INGRESO</button>
                           {cita.estado === "Completado" && (
                             <button onClick={() => generarPDFEntrega(cita)} className="w-full bg-emerald-900/30 hover:bg-emerald-600 text-emerald-400 hover:text-white text-[10px] font-bold px-3 py-2 rounded transition-all border border-emerald-700/50">PDF FINALIZADO</button>
@@ -566,6 +572,7 @@ export default function AdminDashboard() {
           </div>
         )}
 
+        {/* MÓDULOS DE RELLENO */}
         {activeTab === "analitica" && <div className="text-center p-10 text-slate-500">MÓDULO ANALÍTICO ACTIVO</div>}
         {activeTab === "configuracion" && <div className="text-center p-10 text-slate-500">SALA DE CONTROL ACTIVA</div>}
       </div>
