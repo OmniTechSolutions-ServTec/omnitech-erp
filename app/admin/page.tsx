@@ -177,143 +177,129 @@ export default function AdminDashboard() {
   };
 
   // ==========================================================
-  // GENERADORES DE PDF FUTURISTAS (RENDERIZADO NATIVO CANVAS)
+  // NUEVO MOTOR GENERADOR DE PDF DE ÉLITE (DISEÑO CORPORATIVO)
   // ==========================================================
 
-  // Limpieza implacable del número (Borra todo lo que no sea número y el signo +)
-  const sanitizarTelefono = (tel: string) => {
-    if (!tel) return "No registrado";
-    const soloNumeros = tel.replace(/[^0-9+]/g, '');
-    return soloNumeros.length > 8 && !soloNumeros.startsWith('+591') ? `+591 ${soloNumeros.replace('591', '')}` : soloNumeros;
-  };
-
-  // Generador QR Invulnerable al CORS usando un Canvas Nativo
-  const generarQRBase64 = async (texto: string): Promise<string> => {
-    return new Promise((resolve) => {
-      const img = new window.Image();
-      img.crossOrigin = "Anonymous";
-      img.onload = () => {
-        const canvas = document.createElement("canvas");
-        canvas.width = img.width; canvas.height = img.height;
-        const ctx = canvas.getContext("2d");
-        if(ctx) ctx.drawImage(img, 0, 0);
-        resolve(canvas.toDataURL("image/png"));
-      };
-      img.onerror = () => resolve(""); // Falla silenciosa si no hay internet
-      img.src = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(texto)}&margin=1`;
-    });
+  const getBase64ImageFromUrl = async (imageUrl: string): Promise<string> => {
+    try {
+      const res = await fetch(imageUrl, { mode: 'cors' });
+      const blob = await res.blob();
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    } catch (error) {
+      console.error("Error convirtiendo QR:", error);
+      return "";
+    }
   };
 
   const generarPDFIngreso = async (cita: any) => {
     const doc = new jsPDF();
-    const telLimpio = sanitizarTelefono(cita.telefono);
+    
+    // LIMPIEZA DE NÚMERO (Adiós al @lid)
+    const telLimpio = cita.telefono ? cita.telefono.split('@')[0] : "N/A";
+    const telFormateado = telLimpio.startsWith('591') && telLimpio.length > 8 ? `+591 ${telLimpio.substring(3)}` : telLimpio;
 
-    // 1. CABECERA FUTURISTA (DARK MODE NOC)
-    doc.setFillColor(8, 15, 30); // Color Fondo Cyberpunk
-    doc.rect(0, 0, 210, 48, 'F');
-    doc.setFillColor(34, 211, 238); // Línea Cian Neón
-    doc.rect(0, 48, 210, 2, 'F');
+    // 1. CABECERA DARK MODE (NOC)
+    doc.setFillColor(10, 15, 30);
+    doc.rect(0, 0, 210, 45, 'F');
+    doc.setFillColor(34, 211, 238); // Cyan
+    doc.rect(0, 45, 210, 1.5, 'F');
 
     doc.setTextColor(34, 211, 238);
-    doc.setFontSize(28);
+    doc.setFontSize(26);
     doc.setFont("helvetica", "bold");
     doc.text("OMNITECH SOLUTIONS", 105, 22, { align: "center" });
 
     doc.setTextColor(200, 200, 200);
     doc.setFontSize(10);
     doc.setFont("helvetica", "normal");
-    doc.text("SISTEMA DE DESPLIEGUE Y TELEMÁTICA", 105, 29, { align: "center", letterSpacing: 1 });
+    doc.text("COMPROBANTE DE SOLICITUD TÉCNICA", 105, 30, { align: "center", letterSpacing: 1 });
 
-    // ID Badge Central
-    doc.setFillColor(15, 23, 42); 
+    // Badge ID Central
+    doc.setFillColor(20, 30, 50);
     doc.setDrawColor(34, 211, 238);
-    doc.setLineWidth(0.4);
-    doc.roundedRect(65, 35, 80, 8, 1.5, 1.5, 'FD');
+    doc.roundedRect(65, 35, 80, 7, 1.5, 1.5, 'FD');
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(8);
+    doc.text(`TICKET NOC: ${cita.id.toUpperCase()}`, 105, 40, { align: "center" });
+
+    // 2. TARJETA DE DATOS DEL CLIENTE
+    doc.setDrawColor(34, 211, 238);
+    doc.setFillColor(245, 248, 250);
+    doc.roundedRect(14, 55, 182, 30, 2, 2, 'FD');
+    doc.setFillColor(15, 23, 42);
+    doc.roundedRect(14, 55, 182, 8, 2, 2, 'F');
+
+    doc.setTextColor(34, 211, 238);
+    doc.setFontSize(9);
     doc.setFont("helvetica", "bold");
-    doc.text(`TICKET NOC: ${cita.id.toUpperCase()}`, 105, 40.5, { align: "center" });
+    doc.text("PARÁMETROS DE DESPLIEGUE", 18, 60.5);
 
-    // 2. MÓDULOS DE INFORMACIÓN (Tarjetas de Panel de Control)
-    // Módulo Cliente
-    doc.setDrawColor(34, 211, 238);
-    doc.setFillColor(250, 250, 250);
-    doc.roundedRect(14, 60, 88, 35, 2, 2, 'S'); // Borde
-    doc.setFillColor(15, 23, 42); 
-    doc.roundedRect(14, 60, 88, 8, 2, 2, 'F'); // Cabecera de Tarjeta
-    doc.setTextColor(34, 211, 238); doc.setFontSize(9);
-    doc.text("IDENTIFICACIÓN DEL SOLICITANTE", 18, 65.5);
-    
-    doc.setTextColor(0, 0, 0); doc.setFontSize(9);
-    doc.setFont("helvetica", "bold"); doc.text("Nombre:", 18, 75); doc.setFont("helvetica", "normal"); doc.text(cita.nombre, 45, 75);
-    doc.setFont("helvetica", "bold"); doc.text("Contacto:", 18, 82); doc.setFont("helvetica", "normal"); doc.text(telLimpio, 45, 82);
-    doc.setFont("helvetica", "bold"); doc.text("Ubicación:", 18, 89); 
-    let dirBreve = cita.direccion || "No especificada";
-    if (dirBreve.length > 25) dirBreve = dirBreve.substring(0, 25) + "...";
-    doc.setFont("helvetica", "normal"); doc.text(dirBreve, 45, 89);
+    doc.setTextColor(0, 0, 0);
+    doc.setFontSize(10);
+    doc.text("Solicitante:", 18, 71); doc.setFont("helvetica", "normal"); doc.text(cita.nombre, 45, 71);
+    doc.setFont("helvetica", "bold"); doc.text("Contacto:", 105, 71); doc.setFont("helvetica", "normal"); doc.text(telFormateado, 130, 71);
+    doc.setFont("helvetica", "bold"); doc.text("Ubicación:", 18, 78);
+    let dir = cita.direccion || "No especificada";
+    if(dir.length > 60) dir = dir.substring(0, 60) + "...";
+    doc.setFont("helvetica", "normal"); doc.text(dir, 45, 78);
 
-    // Módulo Operativo
-    doc.setDrawColor(34, 211, 238);
-    doc.setFillColor(250, 250, 250);
-    doc.roundedRect(108, 60, 88, 35, 2, 2, 'S');
-    doc.setFillColor(15, 23, 42); 
-    doc.roundedRect(108, 60, 88, 8, 2, 2, 'F'); 
-    doc.setTextColor(34, 211, 238); doc.setFontSize(9);
-    doc.setFont("helvetica", "bold"); doc.text("PARÁMETROS DEL SISTEMA", 112, 65.5);
-    
-    doc.setTextColor(0, 0, 0); doc.setFontSize(9);
-    doc.setFont("helvetica", "bold"); doc.text("Fecha Asignada:", 112, 75); doc.setFont("helvetica", "normal"); doc.text(cita.fecha, 148, 75);
-    doc.setFont("helvetica", "bold"); doc.text("Hora de Enlace:", 112, 82); doc.setFont("helvetica", "normal"); doc.text(cita.hora, 148, 82);
-    doc.setFont("helvetica", "bold"); doc.text("Estado Actual:", 112, 89); 
-    doc.setTextColor(220, 38, 38); doc.setFont("helvetica", "bold"); doc.text(cita.estado.toUpperCase(), 148, 89);
-
-    // 3. TABLA DE DIAGNÓSTICO ESTILIZADA
-    autoTable(doc, { 
-      startY: 105, 
-      headStyles: { fillColor: [8, 15, 30], textColor: [34, 211, 238], fontStyle: 'bold', fontSize: 10 }, 
-      bodyStyles: { fillColor: [250, 252, 255], textColor: [10, 10, 10], fontSize: 10 },
-      head: [['ANÁLISIS PRELIMINAR (Reporte Táctico)']], 
-      body: [[cita.descripcion]], 
-      theme: 'grid',
-      styles: { cellPadding: 5 }
+    // 3. TABLA FUTURISTA
+    autoTable(doc, {
+      startY: 92,
+      headStyles: { fillColor: [15, 23, 42], textColor: [34, 211, 238], fontStyle: 'bold' },
+      bodyStyles: { fillColor: [250, 250, 250], textColor: [0, 0, 0] },
+      head: [['REPORTE DE INCIDENCIA (Diagnóstico Inicial)']],
+      body: [[cita.descripcion]],
+      theme: 'grid'
     });
 
-    const finalY = (doc as any).lastAutoTable.finalY + 15; 
-    
-    // 4. MÓDULO FINANCIERO INICIAL
-    doc.setFillColor(245, 245, 245);
+    const finalY = (doc as any).lastAutoTable.finalY + 15;
+
+    // 4. ESTADO FINANCIERO
+    doc.setFillColor(240, 245, 250);
     doc.roundedRect(14, finalY, 182, 14, 2, 2, 'F');
-    doc.setDrawColor(34, 211, 238); doc.setLineWidth(1); doc.line(14, finalY, 14, finalY + 14); // Borde izquierdo cian
-    
-    doc.setFontSize(11); doc.setTextColor(15, 23, 42); doc.setFont("helvetica", "bold");
-    doc.text("LIQUIDACIÓN INICIAL:", 18, finalY + 9);
-    
-    if (cita.adelantoRealizado) { 
-      doc.setTextColor(16, 185, 129); doc.text(`ADELANTO CONFIRMADO: ${cita.montoAdelanto} Bs. (Ref: ${cita.nroComprobante})`, 80, finalY + 9); 
-    } else { 
-      doc.setTextColor(220, 38, 38); doc.text("PAGO PENDIENTE DE ASIGNACIÓN", 80, finalY + 9); 
+    doc.setFontSize(11);
+    doc.setTextColor(15, 23, 42);
+    doc.setFont("helvetica", "bold");
+    doc.text("ESTADO FINANCIERO:", 18, finalY + 9);
+
+    if (cita.adelantoRealizado) {
+      doc.setTextColor(16, 185, 129);
+      doc.text(`ADELANTO CONFIRMADO: ${cita.montoAdelanto} Bs.`, 75, finalY + 9);
+    } else {
+      doc.setTextColor(220, 38, 38);
+      doc.text("PAGO PENDIENTE", 75, finalY + 9);
     }
 
-    // 5. SECCIÓN DE AUDITORÍA Y FIRMAS OFICIALES (Pie de Página)
+    // 5. PIE DE FIRMAS OFICIAL (Adiós Laboratorio)
     doc.setDrawColor(150); doc.setLineWidth(0.5); doc.line(20, 250, 90, 250);
-    doc.setTextColor(0, 0, 0); doc.setFontSize(10); doc.setFont("helvetica", "bold");
+    doc.setTextColor(0); doc.setFontSize(10); doc.setFont("helvetica", "bold");
     doc.text("CLIENTE / SOLICITANTE", 55, 255, { align: "center" });
-    doc.setFontSize(8); doc.setFont("helvetica", "normal");
-    doc.text("Firma de Conformidad de Solicitud", 55, 260, { align: "center" });
+    doc.setFontSize(8); doc.setFont("helvetica", "normal"); doc.setTextColor(100);
+    doc.text("Firma de Conformidad", 55, 260, { align: "center" });
 
-    // Inyección de tu nombre como Director/Autoridad
     doc.setDrawColor(150); doc.line(120, 250, 190, 250);
-    doc.setFontSize(11); doc.setFont("helvetica", "bold");
+    doc.setFontSize(11); doc.setFont("helvetica", "bold"); doc.setTextColor(0);
     doc.text("Miguel Angel Cuenca Corazón", 155, 255, { align: "center" });
     doc.setFontSize(8); doc.setFont("helvetica", "normal"); doc.setTextColor(100);
-    doc.text("Director General NOC - OmniTech", 155, 260, { align: "center" });
+    doc.text("Director Operativo NOC - OmniTech", 155, 260, { align: "center" });
 
-    // GENERADOR QR NATIVO
-    const qrData = `OMNITECH AUTHENTIC\nTICKET: ${cita.id}\nFECHA: ${cita.fecha}\nESTADO: ${cita.estado}`;
-    const base64QR = await generarQRBase64(qrData);
-    if (base64QR) {
-      doc.addImage(base64QR, 'PNG', 160, 205, 35, 35);
-      doc.setFontSize(6); doc.setTextColor(150); doc.text("ESCANEO DE SEGURIDAD", 177.5, 243, { align: "center" });
+    // 6. GENERACIÓN DE QR POR API SEGURA (Anti-CORS)
+    try {
+      const qrData = encodeURIComponent(`OMNITECH\nTICKET: ${cita.id}\nFECHA: ${cita.fecha}\nESTADO: ${cita.estado}`);
+      const qrUrl = `https://quickchart.io/qr?text=${qrData}&size=150&margin=1&dark=0f172a`;
+      const base64QR = await getBase64ImageFromUrl(qrUrl);
+      if (base64QR) {
+        doc.addImage(base64QR, 'PNG', 160, 205, 35, 35);
+        doc.setFontSize(6); doc.text("CÓDIGO DE AUDITORÍA", 177.5, 243, { align: "center" });
+      }
+    } catch (e) {
+      console.error("QR Error", e);
     }
 
     doc.save(`OmniTech_Ingreso_${cita.nombre.replace(/\s+/g, '_')}.pdf`);
@@ -321,122 +307,127 @@ export default function AdminDashboard() {
 
   const generarPDFEntrega = async (cita: any) => {
     const doc = new jsPDF();
-    const costoFinal = parseFloat(cita.costoFinal || "0"); 
-    const adelanto = parseFloat(cita.montoAdelanto || "0"); 
+    const costoFinal = parseFloat(cita.costoFinal || "0");
+    const adelanto = parseFloat(cita.montoAdelanto || "0");
     const saldo = costoFinal - adelanto;
-    const telLimpio = sanitizarTelefono(cita.telefono);
 
-    // 1. CABECERA FUTURISTA DE FINALIZACIÓN (Acento Esmeralda)
-    doc.setFillColor(8, 15, 30); 
-    doc.rect(0, 0, 210, 48, 'F');
-    doc.setFillColor(16, 185, 129); // Línea Verde Éxito
-    doc.rect(0, 48, 210, 2, 'F');
+    // LIMPIEZA DE NÚMERO
+    const telLimpio = cita.telefono ? cita.telefono.split('@')[0] : "N/A";
+    const telFormateado = telLimpio.startsWith('591') && telLimpio.length > 8 ? `+591 ${telLimpio.substring(3)}` : telLimpio;
+
+    // 1. CABECERA DE ÉXITO (Verde Esmeralda)
+    doc.setFillColor(10, 15, 30);
+    doc.rect(0, 0, 210, 45, 'F');
+    doc.setFillColor(16, 185, 129); // Emerald
+    doc.rect(0, 45, 210, 1.5, 'F');
 
     doc.setTextColor(34, 211, 238);
-    doc.setFontSize(28);
+    doc.setFontSize(26);
     doc.setFont("helvetica", "bold");
     doc.text("OMNITECH SOLUTIONS", 105, 22, { align: "center" });
 
-    doc.setTextColor(200, 200, 200); 
+    doc.setTextColor(200, 200, 200);
     doc.setFontSize(10);
     doc.setFont("helvetica", "normal");
-    doc.text("CERTIFICADO DE FINALIZACIÓN OPERATIVA", 105, 29, { align: "center", letterSpacing: 1 });
+    doc.text("CERTIFICADO DE FINALIZACIÓN TÉCNICA", 105, 30, { align: "center", letterSpacing: 1 });
 
-    doc.setFillColor(15, 23, 42); 
+    // Badge ID Central
+    doc.setFillColor(20, 30, 50);
     doc.setDrawColor(16, 185, 129);
-    doc.setLineWidth(0.4);
-    doc.roundedRect(65, 35, 80, 8, 1.5, 1.5, 'FD');
+    doc.roundedRect(65, 35, 80, 7, 1.5, 1.5, 'FD');
     doc.setTextColor(255, 255, 255);
-    doc.setFontSize(8); doc.setFont("helvetica", "bold");
-    doc.text(`TICKET NOC: ${cita.id.toUpperCase()}`, 105, 40.5, { align: "center" });
+    doc.setFontSize(8);
+    doc.text(`TICKET NOC: ${cita.id.toUpperCase()}`, 105, 40, { align: "center" });
 
-    // 2. BLOQUE DE DATOS LIMPIO
-    doc.setTextColor(0, 0, 0); doc.setFontSize(10);
-    
-    doc.setFont("helvetica", "bold"); doc.text(`CLIENTE / TITULAR:`, 14, 62); 
-    doc.setFont("helvetica", "normal"); doc.text(cita.nombre, 55, 62);
-    
-    doc.setFont("helvetica", "bold"); doc.text(`CONTACTO:`, 14, 69); 
-    doc.setFont("helvetica", "normal"); doc.text(telLimpio, 55, 69);
+    // 2. TARJETA DE RESOLUCIÓN
+    doc.setDrawColor(16, 185, 129);
+    doc.setFillColor(245, 248, 250);
+    doc.roundedRect(14, 55, 182, 22, 2, 2, 'FD');
+    doc.setFillColor(15, 23, 42);
+    doc.roundedRect(14, 55, 182, 8, 2, 2, 'F');
 
-    doc.setFont("helvetica", "bold"); doc.text(`FECHA DE CIERRE:`, 115, 62); 
-    doc.setFont("helvetica", "normal"); doc.text(new Date().toLocaleDateString(), 155, 62);
-    
-    doc.setFont("helvetica", "bold"); doc.text(`MODALIDAD NOC:`, 115, 69); 
-    doc.setFont("helvetica", "normal"); doc.text(cita.modalidad.toUpperCase(), 155, 69);
+    doc.setTextColor(16, 185, 129);
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "bold");
+    doc.text("DATOS DE RESOLUCIÓN", 18, 60.5);
 
-    // 3. TABLA DE TRABAJO REALIZADO
-    autoTable(doc, { 
-      startY: 78, 
-      headStyles: { fillColor: [16, 185, 129], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 10 }, 
-      bodyStyles: { fillColor: [250, 252, 255], textColor: [15, 23, 42], fontSize: 10 },
-      head: [['REPORTE TÁCTICO DE INTERVENCIÓN (Solución Aplicada)']], 
-      body: [[cita.trabajoFinal]], 
-      theme: 'grid',
-      styles: { cellPadding: 5 }
+    doc.setTextColor(0, 0, 0);
+    doc.setFontSize(10);
+    doc.text("Cliente:", 18, 71); doc.setFont("helvetica", "normal"); doc.text(cita.nombre, 40, 71);
+    doc.setFont("helvetica", "bold"); doc.text("Contacto:", 105, 71); doc.setFont("helvetica", "normal"); doc.text(telFormateado, 130, 71);
+
+    // 3. TABLA DE TRABAJO
+    autoTable(doc, {
+      startY: 85,
+      headStyles: { fillColor: [16, 185, 129], textColor: [255, 255, 255], fontStyle: 'bold' },
+      bodyStyles: { fillColor: [250, 250, 250], textColor: [0, 0, 0] },
+      head: [['REPORTE DE INTERVENCIÓN (Trabajo Realizado)']],
+      body: [[cita.trabajoFinal]],
+      theme: 'grid'
     });
 
-    const finalY = (doc as any).lastAutoTable.finalY + 15; 
+    const finalY = (doc as any).lastAutoTable.finalY + 15;
 
-    // 4. MÓDULO FINANCIERO SÓLIDO
-    doc.setDrawColor(200); doc.setFillColor(250, 250, 250);
-    doc.roundedRect(14, finalY, 182, 38, 2, 2, 'FD');
-    doc.setFillColor(15, 23, 42); 
-    doc.roundedRect(14, finalY, 182, 9, 2, 2, 'F');
-    
-    doc.setTextColor(255, 255, 255); doc.setFontSize(10); doc.setFont("helvetica", "bold");
-    doc.text("LIQUIDACIÓN Y SALDOS", 18, finalY + 6);
+    // 4. CAJA FINANCIERA ELEGANTE
+    doc.setDrawColor(200); doc.setFillColor(245, 248, 250);
+    doc.roundedRect(14, finalY, 182, 35, 2, 2, 'FD');
+    doc.setFillColor(15, 23, 42);
+    doc.roundedRect(14, finalY, 182, 8, 2, 2, 'F');
 
-    doc.setTextColor(0, 0, 0); doc.setFontSize(10);
-    doc.setFont("helvetica", "bold"); doc.text(`Costo Total de Operación:`, 18, finalY + 18); doc.setFont("helvetica", "normal"); doc.text(`${costoFinal.toFixed(2)} Bs.`, 160, finalY + 18, { align: "right" });
-    doc.setFont("helvetica", "bold"); doc.text(`Adelanto Registrado a Cuenta:`, 18, finalY + 25); doc.setFont("helvetica", "normal"); doc.text(`- ${adelanto.toFixed(2)} Bs.`, 160, finalY + 25, { align: "right" });
-    
-    doc.setDrawColor(200); doc.line(18, finalY + 29, 160, finalY + 29);
-    
-    doc.setFont("helvetica", "black"); doc.setFontSize(11);
-    doc.text(`SALDO FINAL A PAGAR:`, 18, finalY + 34.5); 
-    doc.setFontSize(14); doc.setTextColor(220, 38, 38); 
-    doc.text(`${saldo > 0 ? saldo.toFixed(2) : "0.00"} Bs.`, 160, finalY + 35, { align: "right" });
+    doc.setTextColor(255); doc.setFontSize(10); doc.setFont("helvetica", "bold");
+    doc.text("LIQUIDACIÓN Y SALDOS", 18, finalY + 5.5);
 
-    // 5. ZONA DE VALIDACIÓN
-    doc.setTextColor(0, 0, 0);
+    doc.setTextColor(0); doc.setFontSize(10); doc.setFont("helvetica", "normal");
+    doc.text("Costo Total Operativo:", 18, finalY + 15); doc.text(`${costoFinal.toFixed(2)} Bs.`, 160, finalY + 15, { align: "right" });
+    doc.text("Adelanto a Cuenta:", 18, finalY + 22); doc.text(`- ${adelanto.toFixed(2)} Bs.`, 160, finalY + 22, { align: "right" });
+    
+    doc.setDrawColor(200); doc.line(18, finalY + 25, 160, finalY + 25);
+    
+    doc.setFont("helvetica", "bold"); doc.setFontSize(11);
+    doc.text("SALDO FINAL A PAGAR:", 18, finalY + 31);
+    doc.setFontSize(14); doc.setTextColor(220, 38, 38);
+    doc.text(`${saldo > 0 ? saldo.toFixed(2) : "0.00"} Bs.`, 160, finalY + 31, { align: "right" });
+
+    // 5. VALIDACIÓN Y FIRMAS (Adiós Laboratorio)
+    doc.setTextColor(0);
     if (cita.modalidad === "En Domicilio") {
-      doc.setFillColor(241, 245, 249); 
-      doc.roundedRect(14, finalY + 45, 120, 25, 2, 2, 'F'); 
+      doc.setFillColor(240, 245, 250);
+      doc.roundedRect(14, finalY + 45, 120, 20, 2, 2, 'F');
       doc.setFontSize(9); doc.setFont("helvetica", "bold");
-      doc.text("VALIDACIÓN TÉCNICA REMOTA", 74, finalY + 52, { align: "center" });
-      doc.setFont("helvetica", "normal"); 
-      doc.text("Certificación procesada vía enlace telemático.", 74, finalY + 59, { align: "center" });
-      doc.setTextColor(16, 185, 129); doc.setFont("helvetica", "bold");
-      doc.text(`ESTADO: ${cita.conformidadDigital ? cita.conformidadDigital.toUpperCase() : "PENDIENTE DE FIRMA"}`, 74, finalY + 65, { align: "center" });
-    } else { 
-      doc.setDrawColor(150); doc.setLineWidth(0.5); doc.line(20, 250, 90, 250); 
-      doc.setFontSize(10); doc.setFont("helvetica", "bold"); doc.setTextColor(0);
-      doc.text("CONFORMIDAD DEL CLIENTE", 55, 255, { align: "center" }); 
+      doc.text("VALIDACIÓN DE CONFORMIDAD", 74, finalY + 51, { align: "center" });
+      doc.setFont("helvetica", "normal");
+      doc.text(`Estado: ${cita.conformidadDigital ? cita.conformidadDigital.toUpperCase() : "PENDIENTE DIGITAL"}`, 74, finalY + 58, { align: "center" });
+    } else {
+      doc.setDrawColor(150); doc.setLineWidth(0.5); doc.line(20, 250, 90, 250);
+      doc.setFontSize(10); doc.setFont("helvetica", "bold");
+      doc.text("CONFORMIDAD DEL CLIENTE", 55, 255, { align: "center" });
       doc.setFontSize(8); doc.setFont("helvetica", "normal"); doc.setTextColor(100);
-      doc.text(`Recepción en Centro de Operaciones`, 55, 260, { align: "center" }); 
+      doc.text("Entrega Física Directa", 55, 260, { align: "center" });
     }
-    
-    // Firma de Autoridad
-    doc.setDrawColor(150); doc.setLineWidth(0.5); doc.line(120, 250, 190, 250); 
-    doc.setFontSize(11); doc.setFont("helvetica", "bold"); doc.setTextColor(0);
-    doc.text("Miguel Angel Cuenca Corazón", 155, 255, { align: "center" }); 
-    doc.setFontSize(8); doc.setFont("helvetica", "normal"); doc.setTextColor(100);
-    doc.text("Director General NOC - OmniTech", 155, 260, { align: "center" });
 
-    // GENERADOR QR NATIVO FINAL
-    const qrData = `OMNITECH VERIFIED\nTICKET: ${cita.id}\nCOSTO: ${costoFinal}Bs\nSALDO: ${saldo}Bs\nCIERRE: ${new Date().toLocaleDateString()}`;
-    const base64QR = await generarQRBase64(qrData);
-    if (base64QR) {
-      doc.addImage(base64QR, 'PNG', 14, 235, 30, 30); 
-      doc.setFontSize(6); doc.setTextColor(150); doc.setFont("helvetica", "bold");
-      doc.text("HASH VERIFICADO", 29, 268, { align: "center" });
+    doc.setDrawColor(150); doc.line(120, 250, 190, 250);
+    doc.setFontSize(11); doc.setFont("helvetica", "bold"); doc.setTextColor(0);
+    doc.text("Miguel Angel Cuenca Corazón", 155, 255, { align: "center" });
+    doc.setFontSize(8); doc.setFont("helvetica", "normal"); doc.setTextColor(100);
+    doc.text("Director Operativo NOC - OmniTech", 155, 260, { align: "center" });
+
+    // 6. CÓDIGO QR EN LA ENTREGA
+    try {
+      const qrData = encodeURIComponent(`OMNITECH\nTICKET: ${cita.id}\nCOSTO: ${costoFinal}Bs\nSALDO: ${saldo}Bs\nCIERRE: ${new Date().toLocaleDateString()}`);
+      const qrUrl = `https://quickchart.io/qr?text=${qrData}&size=150&margin=1&dark=0f172a`;
+      const base64QR = await getBase64ImageFromUrl(qrUrl);
+      if (base64QR) {
+        doc.addImage(base64QR, 'PNG', 14, 235, 30, 30);
+        doc.setFontSize(6); doc.text("HASH VERIFICADO", 29, 268, { align: "center" });
+      }
+    } catch (e) {
+      console.error("QR Error", e);
     }
 
     doc.save(`OmniTech_Entrega_${cita.nombre.replace(/\s+/g, '_')}.pdf`);
   };
 
-  // ... (HTML RENDERIZADO INTACTO PARA EL DASHBOARD)
+  // ... (HTML de Renderizado Intacto)
   if (authChecking) return <div className="min-h-screen bg-[#030712] flex items-center justify-center"><p className="text-cyan-500 font-mono animate-pulse tracking-widest">[ VERIFICANDO CREDENCIALES... ]</p></div>;
   if (!user) { 
     return ( 
