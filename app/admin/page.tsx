@@ -28,6 +28,10 @@ export default function AdminDashboard() {
   const [searchTerm, setSearchTerm] = useState(""); 
   const [copiedId, setCopiedId] = useState("");
 
+  // === ESTADOS PARA RADAR DE AGENDA ===
+  const [showAgenda, setShowAgenda] = useState(false);
+  const [agendaDate, setAgendaDate] = useState(() => new Date().toISOString().split('T')[0]);
+
   const [showCloseModal, setShowCloseModal] = useState(false);
   const [citaActiva, setCitaActiva] = useState<any>(null);
   const [cierreData, setCierreData] = useState({ 
@@ -120,11 +124,11 @@ export default function AdminDashboard() {
     let texto = "";
 
     if (tipo === 'coordinacion') {
-      texto = `Estimado/a ${cita.nombre},\n\nNos comunicamos de *OmniTech Solutions* para coordinar los detalles de su solicitud de servicio técnico.\n\nPor favor, ¿podría confirmarnos su ubicación exacta o enviarnos un punto GPS para programar el servicio técnico?\n\nQuedamos a la espera de su confirmación.`;
+      texto = `Estimado/a ${cita.nombre},\n\nNos comunicamos de OmniTech Solutions para coordinar los detalles de su solicitud de servicio técnico.\n\nPor favor, ¿podría confirmarnos su ubicación exacta o enviarnos un punto GPS para programar la intervención?\n\nQuedamos a la espera de su confirmación.`;
     } else if (tipo === 'ingreso') {
-      texto = `Estimado/a ${cita.nombre},\n\nLe informamos desde *OmniTech Solutions* que su equipo ha sido registrado formalmente en nuestro sistema bajo el Ticket ID: [ ${cita.id.toUpperCase()} ].\n\nA continuación, le enviaremos su Comprobante de Servicio Solicitado en formato PDF para su respectivo control.\n\nGracias por su confianza.`;
+      texto = `Estimado/a ${cita.nombre},\n\nLe informamos desde OmniTech Solutions que su equipo ha sido registrado formalmente en nuestro sistema bajo el Ticket ID: [ ${cita.id.toUpperCase()} ].\n\nA continuación, le enviaremos su Comprobante de Servicio Solicitado en formato PDF para su respectivo control.\n\nGracias por su confianza.`;
     } else {
-      texto = `Estimado/a ${cita.nombre},\n\nDesde *OmniTech Solutions* le comunicamos que el servicio técnico correspondiente a su solicitud ha sido completado.\n\nEn breve le remitiremos el Certificado de Finalización Técnica en formato PDF, detallando el trabajo realizado y la liquidación correspondiente.\n\nQuedamos a su entera disposición.`;
+      texto = `Estimado/a ${cita.nombre},\n\nDesde OmniTech Solutions le comunicamos que el servicio técnico correspondiente a su solicitud ha sido completado.\n\nEn breve le remitiremos el Certificado de Finalización Técnica en formato PDF, detallando el trabajo realizado y la liquidación correspondiente.\n\nQuedamos a su entera disposición.`;
     }
     
     return `https://api.whatsapp.com/send?phone=${num}&text=${encodeURIComponent(texto)}`;
@@ -155,6 +159,17 @@ export default function AdminDashboard() {
     } catch (error) { alert("Error."); } finally { setGuardandoCierre(false); }
   };
 
+  // NUEVO: Función para actualizar la hora sellada
+  const actualizarHora = async (citaId: string, nuevaHora: string, nombreCliente: string) => {
+    if(!nuevaHora) return;
+    try {
+      await updateDoc(doc(db, "citas", citaId), { hora: nuevaHora });
+      registrarAuditoria(`Hora de intervención actualizada a [${nuevaHora}] para ${nombreCliente}`);
+    } catch (error) {
+      console.error("Error al actualizar hora");
+    }
+  };
+
   const copiarID = (id: string) => { navigator.clipboard.writeText(id); setCopiedId(id); setTimeout(() => setCopiedId(""), 2000); };
 
   const exportarCSV = () => {
@@ -172,6 +187,11 @@ export default function AdminDashboard() {
   const ingresosTotales = citas.reduce((acc: number, c: any) => (c.estado === "Completado" && c.costoFinal) ? acc + parseFloat(c.costoFinal) : acc, 0);
   const adelantosFlotantes = citas.reduce((acc: number, c: any) => (c.estado !== "Completado" && c.adelantoRealizado && c.montoAdelanto) ? acc + parseFloat(c.montoAdelanto) : acc, 0);
   const citasFiltradas = citas.filter((cita: any) => cita.nombre.toLowerCase().includes(searchTerm.toLowerCase()) || cita.id.toLowerCase().includes(searchTerm.toLowerCase()));
+
+  // Lógica del Radar de Agenda (Filtrar por En Reparación y Fecha)
+  const citasBloqueadasAgenda = citas
+    .filter((c: any) => c.fecha === agendaDate && c.estado === "En Reparación")
+    .sort((a, b) => a.hora.localeCompare(b.hora));
 
   // ==========================================================
   // GENERADORES DE PDF - MOTOR DE ÉLITE Y COMPARTICIÓN NATIVA
@@ -521,12 +541,53 @@ export default function AdminDashboard() {
               <div className="relative w-full sm:max-w-md">
                 <input type="text" placeholder="Buscar por Nombre o ID..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-[#030712] border border-slate-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-cyan-400 text-sm font-mono" />
               </div>
+              
+              {/* NUEVO: RADAR DE AGENDA DESPLEGABLE */}
+              <div className="relative w-full sm:w-auto">
+                <button 
+                  onClick={() => setShowAgenda(!showAgenda)} 
+                  className={`w-full sm:w-auto px-6 py-3 rounded-lg text-xs font-bold tracking-widest transition-all flex items-center justify-center border ${showAgenda ? 'bg-cyan-900/50 border-cyan-400 text-white shadow-[0_0_15px_rgba(34,211,238,0.3)]' : 'bg-[#030712] border-slate-700 text-cyan-500 hover:border-cyan-500 hover:bg-cyan-950/30'}`}
+                >
+                  <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                  RADAR DE AGENDA
+                </button>
+
+                {showAgenda && (
+                  <div className="absolute right-0 top-full mt-2 w-full sm:w-80 bg-[#0a1120] border border-cyan-500/50 rounded-xl shadow-[0_0_30px_rgba(34,211,238,0.2)] z-50 p-4 animate-fade-in-up">
+                    <label className="block text-[10px] font-bold text-cyan-500 mb-2 uppercase tracking-widest border-b border-slate-800 pb-2">Filtrar Bloqueos por Fecha</label>
+                    <input 
+                      type="date" 
+                      value={agendaDate} 
+                      onChange={(e) => setAgendaDate(e.target.value)} 
+                      className="w-full bg-[#030712] border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-cyan-400 text-xs mb-3 [&::-webkit-calendar-picker-indicator]:invert"
+                    />
+                    
+                    <div className="max-h-48 overflow-y-auto pr-1">
+                      {citasBloqueadasAgenda.length === 0 ? (
+                        <div className="text-center py-4 border border-dashed border-slate-700 rounded bg-[#030712]">
+                          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">ZONA DESPEJADA</p>
+                          <p className="text-[9px] text-slate-600 mt-1">Sin intervenciones marcadas para esta fecha.</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {citasBloqueadasAgenda.map(c => (
+                            <div key={c.id} className="flex justify-between items-center bg-blue-950/30 border border-blue-900/50 p-2 rounded">
+                              <span className="text-blue-400 font-black text-xs bg-[#030712] px-2 py-1 rounded border border-blue-900">{c.hora}</span>
+                              <span className="text-slate-300 text-[10px] font-bold truncate max-w-[140px] text-right">{c.nombre}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
+            
             <div className="bg-[#0a1120]/80 rounded-2xl border border-cyan-500/30 overflow-hidden backdrop-blur-md shadow-2xl">
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse min-w-[1000px]">
                   <thead>
-                    {/* ENCABEZADO CAMBIADO PARA VERIFICAR ACTUALIZACIÓN DE CACHÉ */}
                     <tr className="bg-slate-900/80 border-b border-cyan-500/30 text-cyan-500 uppercase text-[10px] font-black tracking-widest">
                       <th className="p-4">Cliente / Rastreo GPS</th>
                       <th className="p-4">Diagnóstico Previo</th>
@@ -539,17 +600,27 @@ export default function AdminDashboard() {
                     {citasFiltradas.map((cita: any) => (
                       <tr key={cita.id} className="hover:bg-slate-800/30 transition-colors group">
                         
-                        {/* CELDA CLIENTE CON MAPA RESTAURADO INFALIBLE */}
                         <td className="p-4">
                           <p className="font-bold text-white text-base mb-0.5">{cita.nombre}</p>
                           <p className="text-[10px] text-slate-400 font-mono mb-2">ID: {cita.id}</p>
                           
                           <div className="flex flex-col space-y-2">
-                            <span className="text-slate-400 text-xs font-mono bg-slate-950 px-2 py-1 rounded border border-slate-800 w-max">
-                              {cita.fecha} | {cita.hora}
-                            </span>
+                            {/* NUEVO: HORA EDITABLE (SE GUARDA AL QUITAR EL FOCO) */}
+                            <div className="flex items-center space-x-2 text-slate-400 text-xs font-mono bg-slate-950 px-2 py-1 rounded border border-slate-800 w-max">
+                              <span>{cita.fecha} |</span>
+                              <input 
+                                type="time"
+                                defaultValue={cita.hora || ""}
+                                onBlur={(e) => {
+                                  if(e.target.value && e.target.value !== cita.hora) {
+                                    actualizarHora(cita.id, e.target.value, cita.nombre);
+                                  }
+                                }}
+                                className="bg-transparent text-cyan-400 font-bold focus:outline-none focus:border-cyan-400 border-b border-dashed border-slate-600 hover:border-cyan-500 cursor-pointer px-1 [&::-webkit-calendar-picker-indicator]:invert"
+                                title="Modificar Hora Exacta Acordada"
+                              />
+                            </div>
                             
-                            {/* BOTÓN VER MAPA / DIRECCIÓN */}
                             {cita.coordenadas && cita.coordenadas.trim() !== "" ? (
                               <a 
                                 href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cita.coordenadas)}`} 
@@ -686,6 +757,13 @@ export default function AdminDashboard() {
       {showCloseModal && citaActiva && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#030712]/95 backdrop-blur-xl">
           <div className="bg-[#0a1120] border border-cyan-500/50 p-6 rounded-2xl max-w-lg w-full shadow-[0_0_80px_rgba(34,211,238,0.2)] transform animate-fade-in-up relative">
+            <button 
+              onClick={() => setShowCloseModal(false)}
+              className="absolute top-4 right-4 text-slate-500 hover:text-red-500 transition-colors focus:outline-none"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+
             <h3 className="text-xl font-black text-white mb-4 tracking-widest border-b border-slate-800 pb-3 flex items-center pr-8">
               <span className="w-2 h-2 bg-cyan-500 rounded-full mr-3 animate-pulse"></span> 
               REPORTE DE FINALIZACIÓN
