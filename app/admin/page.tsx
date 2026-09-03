@@ -111,14 +111,16 @@ export default function AdminDashboard() {
   const handleLogout = async () => { await signOut(auth); };
 
   // ==========================================================
-  // WHATSAPP: MENÚ DESPLEGABLE CON OPCIONES DE INGRESO Y FINALIZADO
+  // WHATSAPP: MOTOR DESPLEGABLE DE 3 NIVELES
   // ==========================================================
-  const generarEnlaceWA = (cita: any, tipo: 'ingreso' | 'finalizado') => {
+  const generarEnlaceWA = (cita: any, tipo: 'coordinacion' | 'ingreso' | 'finalizado') => {
     const num = cita.telefono.replace(/\D/g, ''); 
     const prefijo = num.length === 8 ? '591' : '';
     let texto = "";
 
-    if (tipo === 'ingreso') {
+    if (tipo === 'coordinacion') {
+      texto = `Hola ${cita.nombre}, somos *OmniTech Solutions*. Nos comunicamos para coordinar los detalles de su solicitud técnica.`;
+    } else if (tipo === 'ingreso') {
       texto = `Hola ${cita.nombre}, nos comunicamos de *OmniTech Solutions*.\n\nSu solicitud ha sido registrada exitosamente en nuestra Sala de Control. En un momento le adjuntaremos su *Comprobante de Servicio Solicitado* en formato PDF para su respaldo.\n\nID del Ticket: *${cita.id.toUpperCase()}*\n\n¡Gracias por elegirnos, estamos a su servicio!`;
     } else {
       texto = `Hola ${cita.nombre}, le informamos desde *OmniTech Solutions* que el servicio técnico en su equipo ha concluido con éxito.\n\nEn un momento le enviaremos su *Certificado de Finalización Operativa* (PDF) con el detalle del trabajo y saldos.\n\nQuedamos a su entera disposición.`;
@@ -171,7 +173,7 @@ export default function AdminDashboard() {
   const citasFiltradas = citas.filter(cita => cita.nombre.toLowerCase().includes(searchTerm.toLowerCase()) || cita.id.toLowerCase().includes(searchTerm.toLowerCase()));
 
   // ==========================================================
-  // GENERADORES DE PDF - ÉPICO Y FUTURISTA
+  // GENERADORES DE PDF - ÉPICO, FUTURISTA Y COMPARTICIÓN DIRECTA
   // ==========================================================
 
   const sanitizarTelefono = (tel: string) => {
@@ -206,15 +208,38 @@ export default function AdminDashboard() {
     doc.line(x + w, y + h, x + w - l, y + h); doc.line(x + w, y + h, x + w, y + h - l); 
   };
 
+  // Motor Inteligente para Compartir o Descargar PDF Automáticamente
+  const procesarYCompartirPDF = async (doc: any, nombreArchivo: string) => {
+    try {
+      const pdfBlob = doc.output('blob');
+      const file = new File([pdfBlob], nombreArchivo, { type: 'application/pdf' });
+      
+      // Si el navegador soporta compartir archivos nativamente (Celulares / Chrome moderno)
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: 'Documento Técnico OmniTech',
+          text: 'Adjunto el documento correspondiente a su servicio técnico en OmniTech Solutions.'
+        });
+      } else {
+        // Fallback: Si está en una PC vieja, simplemente lo descarga
+        doc.save(nombreArchivo);
+      }
+    } catch (error) {
+      console.error("Error compartiendo PDF, descargando en su lugar:", error);
+      doc.save(nombreArchivo);
+    }
+  };
+
   // 1. PDF DE INGRESO
   const generarPDFIngreso = async (cita: any) => {
     const doc = new jsPDF();
     const telLimpio = sanitizarTelefono(cita.telefono);
 
-    // Cabecera Épica (Sin códigos de barra)
+    // Cabecera
     doc.setFillColor(6, 11, 25); 
     doc.rect(0, 0, 210, 50, 'F');
-    doc.setFillColor(34, 211, 238); // Cian
+    doc.setFillColor(34, 211, 238); 
     doc.rect(0, 50, 210, 2, 'F');
 
     doc.setTextColor(34, 211, 238);
@@ -225,7 +250,7 @@ export default function AdminDashboard() {
     doc.setTextColor(148, 163, 184);
     doc.setFontSize(10);
     doc.setFont("helvetica", "normal");
-    doc.text("COMPROBANTE DE SERVICIO SOLICITADO", 105, 32, { align: "center" }); // TEXTO CORREGIDO
+    doc.text("COMPROBANTE DE SERVICIO SOLICITADO", 105, 32, { align: "center" }); 
 
     // ID Badge
     doc.setFillColor(15, 23, 42); 
@@ -293,13 +318,13 @@ export default function AdminDashboard() {
       doc.text("SELLO CRIPTOGRÁFICO", 30, footerY + 21, { align: "center" });
     }
 
-    // Firma Cliente (Centro) - SIN LA PALABRA LABORATORIO
+    // Firma Cliente (Centro)
     doc.setDrawColor(100); doc.setLineWidth(0.4);
     doc.line(75, footerY + 10, 125, footerY + 10);
     doc.setTextColor(0); doc.setFontSize(9); doc.setFont("helvetica", "bold");
     doc.text("FIRMA DEL CLIENTE", 100, footerY + 15, { align: "center" });
     doc.setFontSize(7); doc.setFont("helvetica", "normal"); doc.setTextColor(100);
-    doc.text("Conformidad de Recepción de Equipo", 100, footerY + 19, { align: "center" });
+    doc.text("Conformidad de Solicitud de Servicio", 100, footerY + 19, { align: "center" });
 
     // Firma Autoridad (Derecha)
     doc.line(145, footerY + 10, 195, footerY + 10);
@@ -308,7 +333,8 @@ export default function AdminDashboard() {
     doc.setFontSize(7); doc.setFont("helvetica", "normal"); doc.setTextColor(100);
     doc.text("Director Operativo NOC - OmniTech", 170, footerY + 19, { align: "center" });
 
-    doc.save(`OmniTech_Ingreso_${cita.nombre.replace(/\s+/g, '_')}.pdf`);
+    // Ejecuta el motor inteligente
+    await procesarYCompartirPDF(doc, `OmniTech_Ingreso_${cita.nombre.replace(/\s+/g, '_')}.pdf`);
   };
 
   // 2. PDF DE ENTREGA
@@ -319,7 +345,7 @@ export default function AdminDashboard() {
     const saldo = costoFinal - adelanto;
     const telLimpio = sanitizarTelefono(cita.telefono);
 
-    // Cabecera Épica
+    // Cabecera
     doc.setFillColor(6, 11, 25); 
     doc.rect(0, 0, 210, 50, 'F');
     doc.setFillColor(16, 185, 129); // Verde Esmeralda
@@ -359,7 +385,7 @@ export default function AdminDashboard() {
     doc.setFont("helvetica", "bold"); doc.text("CIERRE NOC:", 18, 82); doc.setFont("courier", "normal"); doc.text(new Date().toLocaleDateString(), 45, 82);
     doc.setFont("helvetica", "bold"); doc.text("MODALIDAD:", 115, 82); doc.setFont("courier", "normal"); doc.text(cita.modalidad.toUpperCase(), 138, 82);
 
-    // Tabla Trabajo Realizado
+    // Tabla Trabajo
     autoTable(doc, { 
       startY: 90, 
       headStyles: { fillColor: [16, 185, 129], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9 }, 
@@ -414,7 +440,7 @@ export default function AdminDashboard() {
       doc.setTextColor(16, 185, 129); doc.setFont("courier", "bold");
       doc.text(`ESTADO DE RED: ${cita.conformidadDigital ? cita.conformidadDigital.toUpperCase() : "PENDIENTE DIGITAL"}`, 132.5, footerY + 14, { align: "center" });
     } else { 
-      // Firma Cliente (Centro) - SIN LABORATORIO
+      // Firma Cliente
       doc.setDrawColor(100); doc.setLineWidth(0.4);
       doc.line(75, footerY + 10, 125, footerY + 10);
       doc.setTextColor(0); doc.setFontSize(9); doc.setFont("helvetica", "bold");
@@ -422,7 +448,7 @@ export default function AdminDashboard() {
       doc.setFontSize(7); doc.setFont("helvetica", "normal"); doc.setTextColor(100);
       doc.text("Conformidad de Finalización", 100, footerY + 19, { align: "center" });
 
-      // Firma Autoridad (Derecha)
+      // Firma Autoridad
       doc.line(145, footerY + 10, 195, footerY + 10);
       doc.setTextColor(0); doc.setFontSize(9); doc.setFont("helvetica", "bold");
       doc.text("MIGUEL ANGEL CUENCA C.", 170, footerY + 15, { align: "center" });
@@ -430,7 +456,8 @@ export default function AdminDashboard() {
       doc.text("Director Operativo NOC - OmniTech", 170, footerY + 19, { align: "center" });
     }
 
-    doc.save(`OmniTech_Entrega_${cita.nombre.replace(/\s+/g, '_')}.pdf`);
+    // Ejecuta el motor inteligente
+    await procesarYCompartirPDF(doc, `OmniTech_Entrega_${cita.nombre.replace(/\s+/g, '_')}.pdf`);
   };
 
   // ==========================================
@@ -540,13 +567,17 @@ export default function AdminDashboard() {
                         </td>
                         <td className="p-4 text-center space-y-2">
                           
-                          {/* BOTÓN WHATSAPP DESPLEGABLE */}
+                          {/* BOTÓN WHATSAPP DESPLEGABLE CON OPCIÓN DE COORDINACIÓN */}
                           <div className="relative group w-full">
                             <button className="w-full bg-green-600/20 hover:bg-green-500 hover:text-black text-green-400 text-[10px] font-bold px-3 py-2 rounded transition-all border border-green-500/30 flex items-center justify-center text-center cursor-pointer shadow-[0_0_10px_rgba(34,197,94,0.1)]">
                               <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path></svg>
                               ENVIAR POR WA ▼
                             </button>
                             <div className="absolute right-0 top-full mt-1 w-full bg-[#0a1120] border border-green-500/30 rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 overflow-hidden flex flex-col">
+                              {/* NUEVA OPCIÓN DE COORDINACIÓN INICIAL */}
+                              <a href={generarEnlaceWA(cita, 'coordinacion')} target="_blank" rel="noopener noreferrer" className="px-3 py-3 text-[9px] font-bold text-green-400 hover:bg-green-900/50 border-b border-green-900/30 transition-colors">
+                                MSJ COORDINAR
+                              </a>
                               <a href={generarEnlaceWA(cita, 'ingreso')} target="_blank" rel="noopener noreferrer" className="px-3 py-3 text-[9px] font-bold text-green-400 hover:bg-green-900/50 border-b border-green-900/30 transition-colors">
                                 MSJ INGRESO
                               </a>
