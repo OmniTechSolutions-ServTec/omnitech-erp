@@ -28,9 +28,13 @@ export default function AdminDashboard() {
   const [searchTerm, setSearchTerm] = useState(""); 
   const [copiedId, setCopiedId] = useState("");
 
-  // === NUEVOS ESTADOS PARA RADAR DE AGENDA ===
+  // === ESTADOS PARA RADAR DE AGENDA ===
   const [showAgenda, setShowAgenda] = useState(false);
   const [agendaDate, setAgendaDate] = useState(() => new Date().toISOString().split('T')[0]);
+
+  // === NUEVO: ESTADO PARA ALERTA DE CHOQUE DE HORARIO ===
+  const [showChoqueModal, setShowChoqueModal] = useState(false);
+  const [choqueInfo, setChoqueInfo] = useState<any>(null);
 
   const [showCloseModal, setShowCloseModal] = useState(false);
   const [citaActiva, setCitaActiva] = useState<any>(null);
@@ -134,19 +138,28 @@ export default function AdminDashboard() {
     return `https://api.whatsapp.com/send?phone=${num}&text=${encodeURIComponent(texto)}`;
   };
 
-  // === NUEVO: FUNCIÓN PARA VERIFICAR CHOQUES DE HORARIO ===
+  // === FUNCIÓN PARA VERIFICAR CHOQUES DE HORARIO ===
   const verificarChoqueAgenda = (fecha: string, hora: string) => {
     return citas.find(c => c.estado === "En Reparación" && c.fecha === fecha && c.hora === hora);
   };
 
-  const handleEstadoChange = async (cita: any, nuevoEstado: string) => {
+  // === MODIFICADO: CONTROLADOR DE CAMBIO DE ESTADO CON RESET DE SELECTOR ===
+  const handleEstadoChange = async (cita: any, nuevoEstado: string, selectElement: HTMLSelectElement) => {
     if (nuevoEstado === "Completado") { 
       setCitaActiva(cita); setShowCloseModal(true); 
     } else if (nuevoEstado === "En Reparación") {
-      // === NUEVO: ESCUDO ANTI-CHOQUES DE AGENDA ===
+      // === ESCUDO ANTI-CHOQUES DE AGENDA ===
       const choque = verificarChoqueAgenda(cita.fecha, cita.hora);
       if (choque && choque.id !== cita.id) {
-        alert(`⚠️ ALERTA DE SISTEMA NOC:\n\nChoque Operativo Detectado. Ya tienes una intervención sellada a las ${cita.hora} el día ${cita.fecha} para el cliente "${choque.nombre}".\n\nPor favor, modifica la hora de esta cita antes de iniciar la reparación.`);
+        // Guardamos la información del choque para mostrarla en el modal
+        setChoqueInfo({
+          hora: cita.hora,
+          fecha: cita.fecha,
+          clienteChoque: choque.nombre
+        });
+        setShowChoqueModal(true);
+        // Regresamos el selector a su estado anterior visualmente
+        selectElement.value = cita.estado || "Pendiente";
         return; 
       }
       try { 
@@ -161,7 +174,6 @@ export default function AdminDashboard() {
     }
   };
 
-  // === NUEVO: FUNCIÓN PARA ACTUALIZAR LA HORA EN LA BASE DE DATOS ===
   const actualizarHora = async (citaId: string, nuevaHora: string, nombreCliente: string) => {
     if(!nuevaHora) return;
     try {
@@ -204,7 +216,7 @@ export default function AdminDashboard() {
   const adelantosFlotantes = citas.reduce((acc: number, c: any) => (c.estado !== "Completado" && c.adelantoRealizado && c.montoAdelanto) ? acc + parseFloat(c.montoAdelanto) : acc, 0);
   const citasFiltradas = citas.filter((cita: any) => cita.nombre.toLowerCase().includes(searchTerm.toLowerCase()) || cita.id.toLowerCase().includes(searchTerm.toLowerCase()));
 
-  // === NUEVO: FILTRADO DE CITAS BLOQUEADAS PARA EL RADAR ===
+  // FILTRADO DE CITAS BLOQUEADAS PARA EL RADAR
   const citasBloqueadasAgenda = citas
     .filter((c: any) => c.fecha === agendaDate && c.estado === "En Reparación")
     .sort((a, b) => a.hora.localeCompare(b.hora));
@@ -269,100 +281,48 @@ export default function AdminDashboard() {
     const doc = new jsPDF();
     const telLimpio = sanitizarTelefono(cita.telefono);
 
-    // Cabecera Épica (Sin Barras)
-    doc.setFillColor(6, 11, 25); 
-    doc.rect(0, 0, 210, 50, 'F');
-    doc.setFillColor(34, 211, 238); 
-    doc.rect(0, 50, 210, 2, 'F');
+    doc.setFillColor(6, 11, 25); doc.rect(0, 0, 210, 50, 'F'); doc.setFillColor(34, 211, 238); doc.rect(0, 50, 210, 2, 'F');
+    doc.setTextColor(34, 211, 238); doc.setFontSize(28); doc.setFont("helvetica", "bold"); doc.text("OMNITECH SOLUTIONS", 105, 25, { align: "center" });
+    doc.setTextColor(148, 163, 184); doc.setFontSize(10); doc.setFont("helvetica", "normal"); doc.text("COMPROBANTE DE SERVICIO SOLICITADO", 105, 32, { align: "center" }); 
 
-    doc.setTextColor(34, 211, 238);
-    doc.setFontSize(28);
-    doc.setFont("helvetica", "bold");
-    doc.text("OMNITECH SOLUTIONS", 105, 25, { align: "center" });
+    doc.setFillColor(15, 23, 42); doc.setDrawColor(34, 211, 238); doc.setLineWidth(0.3); doc.roundedRect(65, 38, 80, 7, 1, 1, 'FD');
+    doc.setTextColor(255, 255, 255); doc.setFontSize(8); doc.setFont("courier", "bold"); doc.text(`TICKET_ID :: ${cita.id.toUpperCase()}`, 105, 43, { align: "center" });
 
-    doc.setTextColor(148, 163, 184);
-    doc.setFontSize(10);
-    doc.setFont("helvetica", "normal");
-    doc.text("COMPROBANTE DE SERVICIO SOLICITADO", 105, 32, { align: "center" }); 
-
-    // ID Badge
-    doc.setFillColor(15, 23, 42); 
-    doc.setDrawColor(34, 211, 238);
-    doc.setLineWidth(0.3);
-    doc.roundedRect(65, 38, 80, 7, 1, 1, 'FD');
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(8);
-    doc.setFont("courier", "bold"); 
-    doc.text(`TICKET_ID :: ${cita.id.toUpperCase()}`, 105, 43, { align: "center" });
-
-    // HUD Datos
-    doc.setFillColor(250, 252, 255);
-    doc.rect(14, 62, 182, 28, 'F'); 
-    drawHUDCorners(doc, 14, 62, 182, 28, [34, 211, 238]);
-
-    doc.setFillColor(15, 23, 42); 
-    doc.rect(14, 62, 182, 7, 'F'); 
-    doc.setTextColor(34, 211, 238); doc.setFontSize(8); doc.setFont("helvetica", "bold");
-    doc.text("[ PARÁMETROS DEL SOLICITANTE ]", 18, 67);
+    doc.setFillColor(250, 252, 255); doc.rect(14, 62, 182, 28, 'F'); drawHUDCorners(doc, 14, 62, 182, 28, [34, 211, 238]);
+    doc.setFillColor(15, 23, 42); doc.rect(14, 62, 182, 7, 'F'); doc.setTextColor(34, 211, 238); doc.setFontSize(8); doc.setFont("helvetica", "bold"); doc.text("[ PARÁMETROS DEL SOLICITANTE ]", 18, 67);
     
     doc.setTextColor(0, 0, 0); doc.setFontSize(9);
     doc.setFont("helvetica", "bold"); doc.text("CLIENTE:", 18, 76); doc.setFont("helvetica", "normal"); doc.text(cita.nombre, 40, 76);
     doc.setFont("helvetica", "bold"); doc.text("CONTACTO:", 115, 76); doc.setFont("courier", "bold"); doc.text(telLimpio, 138, 76);
     doc.setFont("helvetica", "bold"); doc.text("UBICACIÓN:", 18, 84); 
-    let dirBreve = cita.direccion || "No especificada";
-    if (dirBreve.length > 80) dirBreve = dirBreve.substring(0, 80) + "...";
-    doc.setFont("courier", "normal"); doc.text(dirBreve, 45, 84);
+    let dirBreve = cita.direccion || "No especificada"; if (dirBreve.length > 80) dirBreve = dirBreve.substring(0, 80) + "..."; doc.setFont("courier", "normal"); doc.text(dirBreve, 45, 84);
 
-    // Tabla
     autoTable(doc, { 
-      startY: 96, 
-      headStyles: { fillColor: [6, 11, 25], textColor: [34, 211, 238], fontStyle: 'bold', fontSize: 9 }, 
+      startY: 96, headStyles: { fillColor: [6, 11, 25], textColor: [34, 211, 238], fontStyle: 'bold', fontSize: 9 }, 
       bodyStyles: { fillColor: [250, 252, 255], textColor: [10, 10, 10], fontSize: 9 },
-      head: [['[ REPORTE DE INCIDENCIA PRELIMINAR ]']], 
-      body: [[cita.descripcion]], 
-      theme: 'grid',
-      styles: { cellPadding: 6 }
+      head: [['[ REPORTE DE INCIDENCIA PRELIMINAR ]']], body: [[cita.descripcion]], theme: 'grid', styles: { cellPadding: 6 }
     });
 
     const finalY = (doc as any).lastAutoTable.finalY + 15; 
     
-    // Financiero
-    doc.setFillColor(245, 248, 250);
-    doc.rect(14, finalY, 182, 12, 'F');
-    doc.setDrawColor(34, 211, 238); doc.setLineWidth(1.5); doc.line(14, finalY, 14, finalY + 12); 
+    doc.setFillColor(245, 248, 250); doc.rect(14, finalY, 182, 12, 'F'); doc.setDrawColor(34, 211, 238); doc.setLineWidth(1.5); doc.line(14, finalY, 14, finalY + 12); 
+    doc.setFontSize(10); doc.setTextColor(15, 23, 42); doc.setFont("helvetica", "bold"); doc.text("ESTADO FINANCIERO:", 18, finalY + 8);
     
-    doc.setFontSize(10); doc.setTextColor(15, 23, 42); doc.setFont("helvetica", "bold");
-    doc.text("ESTADO FINANCIERO:", 18, finalY + 8);
-    
-    if (cita.adelantoRealizado) { 
-      doc.setTextColor(16, 185, 129); doc.text(`ADELANTO CONFIRMADO: ${cita.montoAdelanto} Bs. (Ref: ${cita.nroComprobante})`, 65, finalY + 8); 
-    } else { 
-      doc.setTextColor(220, 38, 38); doc.text(">> PAGO PENDIENTE DE ASIGNACIÓN", 65, finalY + 8); 
-    }
+    if (cita.adelantoRealizado) { doc.setTextColor(16, 185, 129); doc.text(`ADELANTO CONFIRMADO: ${cita.montoAdelanto} Bs. (Ref: ${cita.nroComprobante})`, 65, finalY + 8); 
+    } else { doc.setTextColor(220, 38, 38); doc.text(">> PAGO PENDIENTE DE ASIGNACIÓN", 65, finalY + 8); }
 
-    // FOOTER
     const footerY = 250;
     const qrText = `[ OMNITECH SOLUTIONS ]\n====================================\nTICKET: ${cita.id}\nTITULAR: ${cita.nombre}\nFECHA: ${cita.fecha}\nESTADO: REGISTRADO\n====================================\nSu solicitud se encuentra en proceso.\nGracias por confiar en OmniTech.`;
     const base64QR = await generarQRBase64(qrText);
     
-    if (base64QR) {
-      doc.addImage(base64QR, 'PNG', 14, footerY - 15, 32, 32);
-      doc.setFontSize(6); doc.setTextColor(100); doc.setFont("courier", "bold");
-      doc.text("SELLO CRIPTOGRÁFICO", 30, footerY + 21, { align: "center" });
-    }
+    if (base64QR) { doc.addImage(base64QR, 'PNG', 14, footerY - 15, 32, 32); doc.setFontSize(6); doc.setTextColor(100); doc.setFont("courier", "bold"); doc.text("SELLO CRIPTOGRÁFICO", 30, footerY + 21, { align: "center" }); }
 
-    doc.setDrawColor(100); doc.setLineWidth(0.4);
-    doc.line(75, footerY + 10, 125, footerY + 10);
-    doc.setTextColor(0); doc.setFontSize(9); doc.setFont("helvetica", "bold");
-    doc.text("FIRMA DEL CLIENTE", 100, footerY + 15, { align: "center" });
-    doc.setFontSize(7); doc.setFont("helvetica", "normal"); doc.setTextColor(100);
-    doc.text("Conformidad de Solicitud de Servicio", 100, footerY + 19, { align: "center" });
+    doc.setDrawColor(100); doc.setLineWidth(0.4); doc.line(75, footerY + 10, 125, footerY + 10);
+    doc.setTextColor(0); doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.text("FIRMA DEL CLIENTE", 100, footerY + 15, { align: "center" });
+    doc.setFontSize(7); doc.setFont("helvetica", "normal"); doc.setTextColor(100); doc.text("Conformidad de Solicitud de Servicio", 100, footerY + 19, { align: "center" });
 
-    doc.line(145, footerY + 10, 195, footerY + 10);
-    doc.setTextColor(0); doc.setFontSize(9); doc.setFont("helvetica", "bold");
-    doc.text("MIGUEL ANGEL CUENCA C.", 170, footerY + 15, { align: "center" });
-    doc.setFontSize(7); doc.setFont("helvetica", "normal"); doc.setTextColor(100);
-    doc.text("Director Operativo NOC - OmniTech", 170, footerY + 19, { align: "center" });
+    doc.line(145, footerY + 10, 195, footerY + 10); doc.setTextColor(0); doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.text("MIGUEL ANGEL CUENCA C.", 170, footerY + 15, { align: "center" });
+    doc.setFontSize(7); doc.setFont("helvetica", "normal"); doc.setTextColor(100); doc.text("Director Operativo NOC - OmniTech", 170, footerY + 19, { align: "center" });
 
     await procesarYCompartirPDF(doc, `OmniTech_Ingreso_${cita.nombre.replace(/\s+/g, '_')}.pdf`);
   };
@@ -370,44 +330,18 @@ export default function AdminDashboard() {
   // 2. PDF DE ENTREGA
   const generarPDFEntrega = async (cita: any) => {
     const doc = new jsPDF();
-    const costoFinal = parseFloat(cita.costoFinal || "0"); 
-    const adelanto = parseFloat(cita.montoAdelanto || "0"); 
-    const saldo = costoFinal - adelanto;
+    const costoFinal = parseFloat(cita.costoFinal || "0"); const adelanto = parseFloat(cita.montoAdelanto || "0"); const saldo = costoFinal - adelanto;
     const telLimpio = sanitizarTelefono(cita.telefono);
 
-    // Cabecera Épica
-    doc.setFillColor(6, 11, 25); 
-    doc.rect(0, 0, 210, 50, 'F');
-    doc.setFillColor(16, 185, 129); 
-    doc.rect(0, 50, 210, 2, 'F');
+    doc.setFillColor(6, 11, 25); doc.rect(0, 0, 210, 50, 'F'); doc.setFillColor(16, 185, 129); doc.rect(0, 50, 210, 2, 'F');
+    doc.setTextColor(34, 211, 238); doc.setFontSize(28); doc.setFont("helvetica", "bold"); doc.text("OMNITECH SOLUTIONS", 105, 25, { align: "center" });
+    doc.setTextColor(200, 200, 200); doc.setFontSize(10); doc.setFont("helvetica", "normal"); doc.text("CERTIFICADO DE FINALIZACIÓN TÉCNICA", 105, 32, { align: "center" });
 
-    doc.setTextColor(34, 211, 238);
-    doc.setFontSize(28);
-    doc.setFont("helvetica", "bold");
-    doc.text("OMNITECH SOLUTIONS", 105, 25, { align: "center" });
+    doc.setFillColor(15, 23, 42); doc.setDrawColor(16, 185, 129); doc.setLineWidth(0.3); doc.roundedRect(65, 38, 80, 7, 1, 1, 'FD');
+    doc.setTextColor(255, 255, 255); doc.setFontSize(8); doc.setFont("courier", "bold"); doc.text(`TICKET_ID :: ${cita.id.toUpperCase()}`, 105, 43, { align: "center" });
 
-    doc.setTextColor(200, 200, 200); 
-    doc.setFontSize(10);
-    doc.setFont("helvetica", "normal");
-    doc.text("CERTIFICADO DE FINALIZACIÓN TÉCNICA", 105, 32, { align: "center" });
-
-    doc.setFillColor(15, 23, 42); 
-    doc.setDrawColor(16, 185, 129);
-    doc.setLineWidth(0.3);
-    doc.roundedRect(65, 38, 80, 7, 1, 1, 'FD');
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(8); doc.setFont("courier", "bold");
-    doc.text(`TICKET_ID :: ${cita.id.toUpperCase()}`, 105, 43, { align: "center" });
-
-    // HUD Datos
-    doc.setFillColor(250, 252, 255);
-    doc.rect(14, 62, 182, 22, 'F'); 
-    drawHUDCorners(doc, 14, 62, 182, 22, [16, 185, 129]);
-
-    doc.setFillColor(15, 23, 42); 
-    doc.rect(14, 62, 182, 7, 'F'); 
-    doc.setTextColor(16, 185, 129); doc.setFontSize(8); doc.setFont("helvetica", "bold");
-    doc.text("[ DATOS DE RESOLUCIÓN ]", 18, 67);
+    doc.setFillColor(250, 252, 255); doc.rect(14, 62, 182, 22, 'F'); drawHUDCorners(doc, 14, 62, 182, 22, [16, 185, 129]);
+    doc.setFillColor(15, 23, 42); doc.rect(14, 62, 182, 7, 'F'); doc.setTextColor(16, 185, 129); doc.setFontSize(8); doc.setFont("helvetica", "bold"); doc.text("[ DATOS DE RESOLUCIÓN ]", 18, 67);
     
     doc.setTextColor(0, 0, 0); doc.setFontSize(9);
     doc.setFont("helvetica", "bold"); doc.text("TITULAR:", 18, 76); doc.setFont("helvetica", "normal"); doc.text(cita.nombre, 40, 76);
@@ -415,100 +349,55 @@ export default function AdminDashboard() {
     doc.setFont("helvetica", "bold"); doc.text("CIERRE NOC:", 18, 82); doc.setFont("courier", "normal"); doc.text(new Date().toLocaleDateString(), 45, 82);
     doc.setFont("helvetica", "bold"); doc.text("MODALIDAD:", 115, 82); doc.setFont("courier", "normal"); doc.text(cita.modalidad.toUpperCase(), 138, 82);
 
-    // Tabla Trabajo
     autoTable(doc, { 
-      startY: 90, 
-      headStyles: { fillColor: [16, 185, 129], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9 }, 
+      startY: 90, headStyles: { fillColor: [16, 185, 129], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9 }, 
       bodyStyles: { fillColor: [250, 252, 255], textColor: [15, 23, 42], fontSize: 9 },
-      head: [['[ REPORTE TÁCTICO DE INTERVENCIÓN - SOLUCIÓN ]']], 
-      body: [[cita.trabajoFinal]], 
-      theme: 'grid',
-      styles: { cellPadding: 6 }
+      head: [['[ REPORTE TÁCTICO DE INTERVENCIÓN - SOLUCIÓN ]']], body: [[cita.trabajoFinal]], theme: 'grid', styles: { cellPadding: 6 }
     });
 
     const finalY = (doc as any).lastAutoTable.finalY + 15; 
 
-    // Módulo Financiero
-    doc.setFillColor(248, 250, 252);
-    doc.rect(14, finalY, 182, 35, 'F');
-    drawHUDCorners(doc, 14, finalY, 182, 35, [15, 23, 42]);
-    
-    doc.setFillColor(15, 23, 42); 
-    doc.rect(14, finalY, 182, 8, 'F');
-    doc.setTextColor(255, 255, 255); doc.setFontSize(9); doc.setFont("helvetica", "bold");
-    doc.text("[ MATRIZ DE LIQUIDACIÓN Y SALDOS ]", 18, finalY + 5.5);
+    doc.setFillColor(248, 250, 252); doc.rect(14, finalY, 182, 35, 'F'); drawHUDCorners(doc, 14, finalY, 182, 35, [15, 23, 42]);
+    doc.setFillColor(15, 23, 42); doc.rect(14, finalY, 182, 8, 'F'); doc.setTextColor(255, 255, 255); doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.text("[ MATRIZ DE LIQUIDACIÓN Y SALDOS ]", 18, finalY + 5.5);
 
     doc.setTextColor(0, 0, 0); doc.setFontSize(10);
     doc.setFont("helvetica", "bold"); doc.text("Costo Total de Operación:", 18, finalY + 16); doc.setFont("courier", "bold"); doc.text(`${costoFinal.toFixed(2)} Bs.`, 160, finalY + 16, { align: "right" });
     doc.setFont("helvetica", "bold"); doc.text("Adelanto Registrado a Cuenta:", 18, finalY + 23); doc.setFont("courier", "bold"); doc.text(`- ${adelanto.toFixed(2)} Bs.`, 160, finalY + 23, { align: "right" });
-    
     doc.setDrawColor(200); doc.line(18, finalY + 27, 160, finalY + 27);
-    
-    doc.setFont("helvetica", "black"); doc.setFontSize(11);
-    doc.text("SALDO FINAL A CANCELAR:", 18, finalY + 32); 
-    doc.setFontSize(14); doc.setTextColor(220, 38, 38); 
-    doc.text(`${saldo > 0 ? saldo.toFixed(2) : "0.00"} Bs.`, 160, finalY + 33, { align: "right" });
+    doc.setFont("helvetica", "black"); doc.setFontSize(11); doc.text("SALDO FINAL A CANCELAR:", 18, finalY + 32); doc.setFontSize(14); doc.setTextColor(220, 38, 38); doc.text(`${saldo > 0 ? saldo.toFixed(2) : "0.00"} Bs.`, 160, finalY + 33, { align: "right" });
 
-    // FOOTER
     const footerY = 250;
     const qrText = `[ OMNITECH SOLUTIONS ]\n====================================\nID TRANSACCIÓN: ${cita.id}\nTITULAR: ${cita.nombre}\nFECHA CIERRE: ${new Date().toLocaleDateString()}\nCOSTO FINAL: ${costoFinal} Bs.\n====================================\nServicio Concluido Exitosamente.`;
     const base64QR = await generarQRBase64(qrText);
-    
-    if (base64QR) {
-      doc.addImage(base64QR, 'PNG', 14, footerY - 15, 32, 32);
-      doc.setFontSize(6); doc.setTextColor(100); doc.setFont("courier", "bold");
-      doc.text("HASH VERIFICADO", 30, footerY + 21, { align: "center" });
-    }
+    if (base64QR) { doc.addImage(base64QR, 'PNG', 14, footerY - 15, 32, 32); doc.setFontSize(6); doc.setTextColor(100); doc.setFont("courier", "bold"); doc.text("HASH VERIFICADO", 30, footerY + 21, { align: "center" }); }
 
     if (cita.modalidad === "En Domicilio") {
-      doc.setFillColor(241, 245, 249); 
-      doc.rect(70, footerY - 5, 125, 25, 'F'); 
-      doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.setTextColor(0);
-      doc.text("[ VALIDACIÓN TÉCNICA REMOTA ]", 132.5, footerY + 2, { align: "center" });
-      doc.setFontSize(8); doc.setFont("helvetica", "normal"); 
-      doc.text("Certificación procesada vía enlace telemático en domicilio.", 132.5, footerY + 8, { align: "center" });
-      doc.setTextColor(16, 185, 129); doc.setFont("courier", "bold");
-      doc.text(`ESTADO DE RED: ${cita.conformidadDigital ? cita.conformidadDigital.toUpperCase() : "PENDIENTE DIGITAL"}`, 132.5, footerY + 14, { align: "center" });
+      doc.setFillColor(241, 245, 249); doc.rect(70, footerY - 5, 125, 25, 'F'); 
+      doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.setTextColor(0); doc.text("[ VALIDACIÓN TÉCNICA REMOTA ]", 132.5, footerY + 2, { align: "center" });
+      doc.setFontSize(8); doc.setFont("helvetica", "normal"); doc.text("Certificación procesada vía enlace telemático en domicilio.", 132.5, footerY + 8, { align: "center" });
+      doc.setTextColor(16, 185, 129); doc.setFont("courier", "bold"); doc.text(`ESTADO DE RED: ${cita.conformidadDigital ? cita.conformidadDigital.toUpperCase() : "PENDIENTE DIGITAL"}`, 132.5, footerY + 14, { align: "center" });
     } else { 
-      doc.setDrawColor(100); doc.setLineWidth(0.4);
-      doc.line(75, footerY + 10, 125, footerY + 10);
-      doc.setTextColor(0); doc.setFontSize(9); doc.setFont("helvetica", "bold");
-      doc.text("FIRMA DEL CLIENTE", 100, footerY + 15, { align: "center" });
-      doc.setFontSize(7); doc.setFont("helvetica", "normal"); doc.setTextColor(100);
-      doc.text("Conformidad de Finalización", 100, footerY + 19, { align: "center" });
+      doc.setDrawColor(100); doc.setLineWidth(0.4); doc.line(75, footerY + 10, 125, footerY + 10);
+      doc.setTextColor(0); doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.text("FIRMA DEL CLIENTE", 100, footerY + 15, { align: "center" });
+      doc.setFontSize(7); doc.setFont("helvetica", "normal"); doc.setTextColor(100); doc.text("Conformidad de Finalización", 100, footerY + 19, { align: "center" });
 
-      doc.line(145, footerY + 10, 195, footerY + 10);
-      doc.setTextColor(0); doc.setFontSize(9); doc.setFont("helvetica", "bold");
-      doc.text("MIGUEL ANGEL CUENCA C.", 170, footerY + 15, { align: "center" });
-      doc.setFontSize(7); doc.setFont("helvetica", "normal"); doc.setTextColor(100);
-      doc.text("Director Operativo NOC - OmniTech", 170, footerY + 19, { align: "center" });
+      doc.line(145, footerY + 10, 195, footerY + 10); doc.setTextColor(0); doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.text("MIGUEL ANGEL CUENCA C.", 170, footerY + 15, { align: "center" });
+      doc.setFontSize(7); doc.setFont("helvetica", "normal"); doc.setTextColor(100); doc.text("Director Operativo NOC - OmniTech", 170, footerY + 19, { align: "center" });
     }
 
     await procesarYCompartirPDF(doc, `OmniTech_Entrega_${cita.nombre.replace(/\s+/g, '_')}.pdf`);
   };
 
-  // ==========================================
-  // RENDERIZADO DEL DASHBOARD HTML
-  // ==========================================
   if (authChecking) return <div className="min-h-screen bg-[#030712] flex items-center justify-center"><p className="text-cyan-500 font-mono animate-pulse tracking-widest">[ VERIFICANDO CREDENCIALES... ]</p></div>;
   if (!user) { 
     return ( 
       <div className="min-h-screen bg-[#030712] flex items-center justify-center p-4 relative overflow-hidden"> 
         <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px] pointer-events-none"></div> 
         <div className="bg-[#0a1120]/90 p-8 md:p-10 rounded-2xl border border-cyan-500/40 backdrop-blur-xl shadow-[0_0_50px_rgba(34,211,238,0.15)] w-full max-w-md relative z-10"> 
-          <div className="text-center mb-8">
-            <h1 className="text-3xl font-black text-white tracking-widest">SISTEMA <span className="text-cyan-500">NOC</span></h1>
-            <p className="text-red-400 font-mono text-xs mt-2 font-bold tracking-widest border border-red-900/50 bg-red-950/30 py-1 rounded">ACCESO RESTRINGIDO</p>
-          </div> 
+          <div className="text-center mb-8"><h1 className="text-3xl font-black text-white tracking-widest">SISTEMA <span className="text-cyan-500">NOC</span></h1><p className="text-red-400 font-mono text-xs mt-2 font-bold tracking-widest border border-red-900/50 bg-red-950/30 py-1 rounded">ACCESO RESTRINGIDO</p></div> 
           <form onSubmit={handleLogin} className="space-y-6"> 
-            <div>
-              <label className="block text-xs font-mono text-cyan-500 mb-2 uppercase">Credencial</label>
-              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required className="w-full bg-[#030712] border border-slate-700 rounded p-3 text-white focus:outline-none focus:border-cyan-500" />
-            </div> 
-            <div>
-              <label className="block text-xs font-mono text-cyan-500 mb-2 uppercase">Contraseña</label>
-              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required className="w-full bg-[#030712] border border-slate-700 rounded p-3 text-white focus:outline-none focus:border-cyan-500 tracking-widest" />
-            </div> 
+            <div><label className="block text-xs font-mono text-cyan-500 mb-2 uppercase">Credencial</label><input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required className="w-full bg-[#030712] border border-slate-700 rounded p-3 text-white focus:outline-none focus:border-cyan-500" /></div> 
+            <div><label className="block text-xs font-mono text-cyan-500 mb-2 uppercase">Contraseña</label><input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required className="w-full bg-[#030712] border border-slate-700 rounded p-3 text-white focus:outline-none focus:border-cyan-500 tracking-widest" /></div> 
             {loginError && <p className="text-red-500 text-xs font-bold text-center bg-red-950/50 p-2 rounded">{loginError}</p>} 
             <button type="submit" disabled={isLoggingIn} className="w-full py-4 rounded font-bold tracking-widest bg-cyan-600 hover:bg-cyan-500 text-white shadow-[0_0_20px_rgba(34,211,238,0.3)]">{isLoggingIn ? "AUTENTICANDO..." : "INICIAR SESIÓN"}</button> 
           </form> 
@@ -532,15 +421,9 @@ export default function AdminDashboard() {
             </p>
           </div>
           <div className="mt-4 md:mt-0 flex items-center space-x-4">
-            <Link href="/radar" className="px-4 py-2 border border-cyan-500/50 text-cyan-400 hover:bg-cyan-900/30 rounded-lg text-xs font-bold tracking-widest transition-all shadow-[0_0_15px_rgba(34,211,238,0.2)] flex items-center">
-              <span className="w-2 h-2 bg-red-500 rounded-full animate-ping mr-2"></span> RADAR NOC
-            </Link>
-            <Link href="/academia" className="px-4 py-2 border border-emerald-500/50 text-emerald-400 hover:bg-emerald-900/30 rounded-lg text-xs font-bold tracking-widest transition-all shadow-[0_0_15px_rgba(16,185,129,0.2)] flex items-center">
-              ACADEMIA
-            </Link>
-            <div className="flex items-center bg-[#030712] border border-cyan-900/50 px-4 py-2 rounded-lg">
-              <div className="w-3 h-3 bg-green-500 rounded-full animate-ping mr-3"></div><span className="text-green-400 text-sm font-bold tracking-widest">{user.email}</span>
-            </div>
+            <Link href="/radar" className="px-4 py-2 border border-cyan-500/50 text-cyan-400 hover:bg-cyan-900/30 rounded-lg text-xs font-bold tracking-widest transition-all shadow-[0_0_15px_rgba(34,211,238,0.2)] flex items-center"><span className="w-2 h-2 bg-red-500 rounded-full animate-ping mr-2"></span> RADAR NOC</Link>
+            <Link href="/academia" className="px-4 py-2 border border-emerald-500/50 text-emerald-400 hover:bg-emerald-900/30 rounded-lg text-xs font-bold tracking-widest transition-all shadow-[0_0_15px_rgba(16,185,129,0.2)] flex items-center">ACADEMIA</Link>
+            <div className="flex items-center bg-[#030712] border border-cyan-900/50 px-4 py-2 rounded-lg"><div className="w-3 h-3 bg-green-500 rounded-full animate-ping mr-3"></div><span className="text-green-400 text-sm font-bold tracking-widest">{user.email}</span></div>
             <button onClick={handleLogout} className="px-4 py-2 bg-red-950/30 border border-red-900 hover:bg-red-900 hover:text-white text-red-500 rounded-lg text-xs font-bold tracking-widest transition-all">SALIR</button>
           </div>
         </header>
@@ -553,12 +436,14 @@ export default function AdminDashboard() {
 
         {activeTab === "monitoreo" && (
           <div className="animate-fade-in-up">
-            <div className="mb-4 flex flex-col sm:flex-row items-center justify-between bg-[#0a1120]/80 p-4 rounded-2xl border border-cyan-900/40 backdrop-blur-md shadow-lg gap-4">
-              <div className="relative w-full sm:max-w-md">
+            
+            {/* === MODIFICADO: CONTENEDOR DEL BUSCADOR Y RADAR CON Z-INDEX MÁS ALTO === */}
+            <div className="mb-4 flex flex-col sm:flex-row items-center justify-between bg-[#0a1120]/80 p-4 rounded-2xl border border-cyan-900/40 backdrop-blur-md shadow-lg gap-4 relative z-[200]">
+              <div className="w-full sm:max-w-md">
                 <input type="text" placeholder="Buscar por Nombre o ID..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-[#030712] border border-slate-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-cyan-400 text-sm font-mono" />
               </div>
 
-              {/* === NUEVO: BOTÓN Y PANEL DESPLEGABLE DEL RADAR DE AGENDA === */}
+              {/* RADAR DE AGENDA DESPLEGABLE */}
               <div className="relative w-full sm:w-auto">
                 <button 
                   onClick={() => setShowAgenda(!showAgenda)} 
@@ -569,7 +454,7 @@ export default function AdminDashboard() {
                 </button>
 
                 {showAgenda && (
-                  <div className="absolute right-0 top-full mt-2 w-full sm:w-80 bg-[#0a1120] border border-cyan-500/50 rounded-xl shadow-[0_0_50px_rgba(34,211,238,0.3)] z-50 p-4 animate-fade-in-up">
+                  <div className="absolute right-0 top-full mt-2 w-full sm:w-80 bg-[#0a1120] border border-cyan-500/50 rounded-xl shadow-[0_0_50px_rgba(34,211,238,0.3)] p-4 animate-fade-in-up">
                     <label className="block text-[10px] font-bold text-cyan-500 mb-2 uppercase tracking-widest border-b border-slate-800 pb-2">Verificar Choques de Horario</label>
                     <input 
                       type="date" 
@@ -600,11 +485,11 @@ export default function AdminDashboard() {
               </div>
             </div>
             
-            {/* === AVISO TÁCTICO: Se cambió overflow-hidden por overflow-visible para que el menú de la tabla no se corte === */}
+            {/* === MODIFICADO: CONTENEDOR DE LA TABLA CON Z-INDEX INFERIOR === */}
             <div className="bg-[#0a1120]/80 rounded-2xl border border-cyan-500/30 overflow-visible backdrop-blur-md shadow-2xl relative z-10">
-              <div className="overflow-x-auto pb-32"> {/* Espacio inferior (pb-32) para que los menús tengan donde caer sin scroll */}
+              <div className="overflow-x-auto pb-32">
                 <table className="w-full text-left border-collapse min-w-[1000px]">
-                  <thead>
+                  <thead className="relative z-0">
                     <tr className="bg-slate-900/80 border-b border-cyan-500/30 text-cyan-500 uppercase text-[10px] font-black tracking-widest">
                       <th className="p-4">Cliente / Rastreo GPS</th>
                       <th className="p-4">Diagnóstico Previo</th>
@@ -624,7 +509,7 @@ export default function AdminDashboard() {
                           <p className="text-[10px] text-slate-400 font-mono mb-2">ID: {cita.id}</p>
                           
                           <div className="flex flex-col space-y-2">
-                            {/* === NUEVO: HORA EDITABLE Y BLOQUEABLE === */}
+                            {/* HORA EDITABLE Y BLOQUEABLE */}
                             <div className={`flex items-center space-x-2 text-xs font-mono px-2 py-1 rounded border w-max ${isLocked ? 'bg-blue-950/50 border-blue-900/50 text-blue-400' : 'bg-slate-950 border-slate-800 text-slate-400'}`}>
                               <span>{cita.fecha} |</span>
                               <input 
@@ -643,20 +528,9 @@ export default function AdminDashboard() {
                             </div>
                             
                             {cita.coordenadas && cita.coordenadas.trim() !== "" ? (
-                              <a 
-                                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cita.coordenadas)}`} 
-                                target="_blank" 
-                                rel="noopener noreferrer" 
-                                className="inline-flex items-center bg-blue-900/40 hover:bg-blue-600 text-blue-400 hover:text-white text-[10px] font-bold px-2 py-1.5 rounded transition-all border border-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.3)] w-max"
-                              >
-                                <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg> 
-                                VER EN MAPS
-                              </a>
+                              <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cita.coordenadas)}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center bg-blue-900/40 hover:bg-blue-600 text-blue-400 hover:text-white text-[10px] font-bold px-2 py-1.5 rounded transition-all border border-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.3)] w-max"><svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg> VER EN MAPS</a>
                             ) : (
-                              <div className="bg-slate-900/50 border border-slate-800 p-1.5 rounded w-max max-w-[200px]">
-                                <span className="text-[8px] text-slate-500 uppercase font-bold block mb-0.5">Dirección:</span>
-                                <span className="text-[10px] text-slate-300 truncate block">{cita.direccion || "No registrada"}</span>
-                              </div>
+                              <div className="bg-slate-900/50 border border-slate-800 p-1.5 rounded w-max max-w-[200px]"><span className="text-[8px] text-slate-500 uppercase font-bold block mb-0.5">Dirección:</span><span className="text-[10px] text-slate-300 truncate block">{cita.direccion || "No registrada"}</span></div>
                             )}
                           </div>
                         </td>
@@ -669,7 +543,11 @@ export default function AdminDashboard() {
                         </td>
                         <td className="p-4">
                           <span className={`px-3 py-1.5 rounded text-[10px] font-black tracking-wider border block w-max mb-2 ${cita.estado === "Pendiente" ? "bg-amber-950/50 text-amber-400" : cita.estado === "En Reparación" ? "bg-blue-950/50 text-blue-400 shadow-[0_0_10px_rgba(59,130,246,0.3)] animate-pulse" : "bg-emerald-950/50 text-emerald-400"}`}>{cita.estado ? cita.estado.toUpperCase() : "PENDIENTE"}</span>
-                          <select className="block w-full bg-[#030712] border border-slate-700 text-slate-300 text-[10px] rounded px-1 py-1 focus:outline-none focus:border-cyan-500 cursor-pointer" value={cita.estado || "Pendiente"} onChange={(e) => handleEstadoChange(cita, e.target.value)}>
+                          <select 
+                            className="block w-full bg-[#030712] border border-slate-700 text-slate-300 text-[10px] rounded px-1 py-1 focus:outline-none focus:border-cyan-500 cursor-pointer" 
+                            value={cita.estado || "Pendiente"} 
+                            onChange={(e) => handleEstadoChange(cita, e.target.value, e.target)}
+                          >
                             <option value="Pendiente">Marcar Pendiente</option>
                             <option value="En Reparación">Iniciar Reparación (Sellar Hora)</option>
                             <option value="Completado">Finalizar Equipo</option>
@@ -677,25 +555,17 @@ export default function AdminDashboard() {
                         </td>
                         <td className="p-4 align-top w-72">
                           <div className="grid grid-cols-2 gap-3 relative">
-                            {/* EL MENÚ DESPLEGABLE TÁCTICO ORIGINAL INTACTO */}
                             <div className="bg-[#030712] border border-green-900/50 p-2 rounded-lg shadow-inner flex flex-col justify-between">
                               <p className="text-[8px] text-green-500 font-bold uppercase tracking-widest mb-2 text-center">Mensajería WA</p>
                               <div className="flex flex-col space-y-1.5 relative group">
                                 <button className="w-full bg-green-900/30 hover:bg-green-600 text-green-400 hover:text-white text-[9px] font-bold px-1 py-1.5 rounded transition-all border border-green-700/50 text-center flex items-center justify-center cursor-pointer shadow-[0_0_10px_rgba(34,197,94,0.1)]">
                                   ENVIAR POR WA ▼
                                 </button>
-                                {/* AQUÍ ES DONDE OCURRÍA EL CORTE. LA SOLUCIÓN ESTÁ EN EL div de la tabla que ahora es overflow-visible y tiene pb-32 */}
                                 <div className="absolute left-0 top-full mt-1 w-full bg-[#0a1120] border border-green-500/30 rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-[100] flex flex-col pointer-events-none group-hover:pointer-events-auto">
-                                  <a href={generarEnlaceWA(cita, 'coordinacion')} target="_blank" rel="noopener noreferrer" className="px-3 py-3 text-[9px] font-bold text-green-400 hover:bg-green-900/50 border-b border-green-900/30 transition-colors text-center">
-                                    MSJ COORDINAR
-                                  </a>
-                                  <a href={generarEnlaceWA(cita, 'ingreso')} target="_blank" rel="noopener noreferrer" className="px-3 py-3 text-[9px] font-bold text-green-400 hover:bg-green-900/50 border-b border-green-900/30 transition-colors text-center">
-                                    MSJ INGRESO
-                                  </a>
+                                  <a href={generarEnlaceWA(cita, 'coordinacion')} target="_blank" rel="noopener noreferrer" className="px-3 py-3 text-[9px] font-bold text-green-400 hover:bg-green-900/50 border-b border-green-900/30 transition-colors text-center">MSJ COORDINAR</a>
+                                  <a href={generarEnlaceWA(cita, 'ingreso')} target="_blank" rel="noopener noreferrer" className="px-3 py-3 text-[9px] font-bold text-green-400 hover:bg-green-900/50 border-b border-green-900/30 transition-colors text-center">MSJ INGRESO</a>
                                   {cita.estado === "Completado" && (
-                                    <a href={generarEnlaceWA(cita, 'finalizado')} target="_blank" rel="noopener noreferrer" className="px-3 py-3 text-[9px] font-bold text-green-400 hover:bg-green-900/50 transition-colors text-center">
-                                      MSJ FINALIZADO
-                                    </a>
+                                    <a href={generarEnlaceWA(cita, 'finalizado')} target="_blank" rel="noopener noreferrer" className="px-3 py-3 text-[9px] font-bold text-green-400 hover:bg-green-900/50 transition-colors text-center">MSJ FINALIZADO</a>
                                   )}
                                 </div>
                               </div>
@@ -789,30 +659,17 @@ export default function AdminDashboard() {
         )}
       </div>
 
+      {/* === MODAL DE FINALIZACIÓN DE CITA === */}
       {showCloseModal && citaActiva && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#030712]/95 backdrop-blur-xl">
+        <div className="fixed inset-0 z-[600] flex items-center justify-center p-4 bg-[#030712]/95 backdrop-blur-xl">
           <div className="bg-[#0a1120] border border-cyan-500/50 p-6 rounded-2xl max-w-lg w-full shadow-[0_0_80px_rgba(34,211,238,0.2)] transform animate-fade-in-up relative">
-            <h3 className="text-xl font-black text-white mb-4 tracking-widest border-b border-slate-800 pb-3 flex items-center pr-8">
-              <span className="w-2 h-2 bg-cyan-500 rounded-full mr-3 animate-pulse"></span> 
-              REPORTE DE FINALIZACIÓN
-            </h3>
+            <button onClick={() => setShowCloseModal(false)} className="absolute top-4 right-4 text-slate-500 hover:text-red-500 transition-colors focus:outline-none"><svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+            <h3 className="text-xl font-black text-white mb-4 tracking-widest border-b border-slate-800 pb-3 flex items-center pr-8"><span className="w-2 h-2 bg-cyan-500 rounded-full mr-3 animate-pulse"></span> REPORTE DE FINALIZACIÓN</h3>
             <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-cyan-500 mb-1 uppercase">Trabajo Realmente Ejecutado</label>
-                <textarea rows={3} value={cierreData.trabajoRealizado} onChange={(e) => setCierreData({...cierreData, trabajoRealizado: e.target.value})} className="w-full bg-[#030712] border border-slate-700 rounded-lg p-3 text-white focus:outline-none focus:border-cyan-400 text-sm resize-none"></textarea>
-              </div>
+              <div><label className="block text-xs font-bold text-cyan-500 mb-1 uppercase">Trabajo Realmente Ejecutado</label><textarea rows={3} value={cierreData.trabajoRealizado} onChange={(e) => setCierreData({...cierreData, trabajoRealizado: e.target.value})} className="w-full bg-[#030712] border border-slate-700 rounded-lg p-3 text-white focus:outline-none focus:border-cyan-400 text-sm resize-none"></textarea></div>
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-cyan-500 mb-1 uppercase">Costo Total (Bs.)</label>
-                  <input type="number" value={cierreData.costoTotal} onChange={(e) => setCierreData({...cierreData, costoTotal: e.target.value})} className="w-full bg-[#030712] border border-slate-700 rounded-lg p-3 text-white focus:outline-none focus:border-cyan-400 text-sm font-mono" />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-cyan-500 mb-1 uppercase">Modalidad</label>
-                  <select value={cierreData.modalidad} onChange={(e) => setCierreData({...cierreData, modalidad: e.target.value})} className="w-full bg-[#030712] border border-slate-700 rounded-lg p-3 text-white focus:outline-none focus:border-cyan-400 text-sm cursor-pointer">
-                    <option value="Laboratorio">En Laboratorio</option>
-                    <option value="En Domicilio">En Domicilio</option>
-                  </select>
-                </div>
+                <div><label className="block text-xs font-bold text-cyan-500 mb-1 uppercase">Costo Total (Bs.)</label><input type="number" value={cierreData.costoTotal} onChange={(e) => setCierreData({...cierreData, costoTotal: e.target.value})} className="w-full bg-[#030712] border border-slate-700 rounded-lg p-3 text-white focus:outline-none focus:border-cyan-400 text-sm font-mono" /></div>
+                <div><label className="block text-xs font-bold text-cyan-500 mb-1 uppercase">Modalidad</label><select value={cierreData.modalidad} onChange={(e) => setCierreData({...cierreData, modalidad: e.target.value})} className="w-full bg-[#030712] border border-slate-700 rounded-lg p-3 text-white focus:outline-none focus:border-cyan-400 text-sm cursor-pointer"><option value="Laboratorio">En Laboratorio</option><option value="En Domicilio">En Domicilio</option></select></div>
               </div>
               <div className="flex space-x-4 pt-4 mt-4 border-t border-slate-800">
                 <button onClick={() => setShowCloseModal(false)} className="flex-1 py-3 rounded-lg border border-slate-700 text-slate-400 font-bold hover:bg-slate-800 hover:text-white transition-all text-xs tracking-widest">CANCELAR</button>
@@ -822,6 +679,26 @@ export default function AdminDashboard() {
           </div>
         </div>
       )}
+
+      {/* === NUEVO: MODAL ALERTA ROJA - ESCUDO ANTI CHOQUES === */}
+      {showChoqueModal && choqueInfo && (
+        <div className="fixed inset-0 z-[600] flex items-center justify-center p-4 bg-red-950/80 backdrop-blur-sm animate-fade-in">
+          <div className="bg-[#030712] border border-red-500 p-8 rounded-2xl max-w-md w-full shadow-[0_0_80px_rgba(239,68,68,0.4)] text-center relative overflow-hidden">
+            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-3/4 h-1 bg-gradient-to-r from-transparent via-red-500 to-transparent shadow-[0_0_20px_rgba(239,68,68,1)]"></div>
+            <div className="w-20 h-20 bg-red-900/30 rounded-full flex items-center justify-center mx-auto mb-6 border border-red-500/50 shadow-[0_0_30px_rgba(239,68,68,0.4)] animate-pulse">
+              <svg className="w-10 h-10 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+            </div>
+            <h3 className="text-2xl font-black text-red-500 mb-2 tracking-widest uppercase">¡ALERTA DE CHOQUE!</h3>
+            <p className="text-slate-300 mb-6 text-sm leading-relaxed">
+              El Sistema NOC ha bloqueado esta acción. Ya tienes una intervención sellada a las <strong className="text-white bg-slate-800 px-2 py-0.5 rounded">{choqueInfo.hora}</strong> el día <strong className="text-white">{choqueInfo.fecha}</strong> para el cliente: <br/><br/>
+              <strong className="text-red-400 uppercase tracking-widest bg-red-950/50 px-4 py-2 border border-red-900/50 rounded inline-block">{choqueInfo.clienteChoque}</strong>
+            </p>
+            <p className="text-xs text-slate-500 font-mono mb-8">Por favor, edita la hora de la cita actual antes de iniciar la reparación.</p>
+            <button onClick={() => setShowChoqueModal(false)} className="w-full bg-slate-800 hover:bg-red-600 text-white font-bold py-4 rounded-xl transition-all tracking-widest uppercase shadow-[0_0_20px_rgba(239,68,68,0.2)]">ENTENDIDO</button>
+          </div>
+        </div>
+      )}
+
     </main>
   );
 }
