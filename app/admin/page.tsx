@@ -28,11 +28,10 @@ export default function AdminDashboard() {
   const [searchTerm, setSearchTerm] = useState(""); 
   const [copiedId, setCopiedId] = useState("");
 
-  // === ESTADOS PARA RADAR DE AGENDA ===
+  // === ESTADOS PARA RADAR DE AGENDA GLOBAL ===
   const [showAgenda, setShowAgenda] = useState(false);
-  const [agendaDate, setAgendaDate] = useState(() => new Date().toISOString().split('T')[0]);
 
-  // === NUEVO: ESTADO PARA ALERTA DE CHOQUE DE HORARIO ===
+  // === ESTADO PARA ALERTA DE CHOQUE DE HORARIO ===
   const [showChoqueModal, setShowChoqueModal] = useState(false);
   const [choqueInfo, setChoqueInfo] = useState<any>(null);
 
@@ -118,9 +117,6 @@ export default function AdminDashboard() {
   };
   const handleLogout = async () => { await signOut(auth); };
 
-  // ==========================================================
-  // WHATSAPP: MOTOR DE REDIRECCIÓN EXACTA (API UNIVERSAL)
-  // ==========================================================
   const generarEnlaceWA = (cita: any, tipo: 'coordinacion' | 'ingreso' | 'finalizado') => {
     let num = cita.telefono ? String(cita.telefono).replace(/@.*$/, '').replace(/\D/g, '') : '';
     if (num.length === 8) { num = '591' + num; }
@@ -138,27 +134,38 @@ export default function AdminDashboard() {
     return `https://api.whatsapp.com/send?phone=${num}&text=${encodeURIComponent(texto)}`;
   };
 
-  // === FUNCIÓN PARA VERIFICAR CHOQUES DE HORARIO ===
+  // === GENERADOR DE ALARMA AUTOMÁTICA (LINK A CALENDARIO) ===
+  const generarEnlaceCalendario = (cita: any) => {
+    if (!cita.fecha || !cita.hora) return "#";
+    const [year, month, day] = cita.fecha.split("-");
+    const [hour, minute] = cita.hora.split(":");
+    
+    // Crear fecha de inicio en formato ISO para Google Calendar (Asumimos zona horaria local)
+    const startDate = new Date(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute));
+    const endDate = new Date(startDate.getTime() + 2 * 60 * 60 * 1000); // Estimamos 2 horas de trabajo
+    
+    // Formatear a YYYYMMDDTHHMMSSZ (UTC)
+    const formatGoogleDate = (d: Date) => d.toISOString().replace(/-|:|\.\d\d\d/g, "");
+    
+    const text = encodeURIComponent(`NOC OmniTech: ${cita.nombre}`);
+    const details = encodeURIComponent(`Ticket ID: ${cita.id}\nFalla: ${cita.descripcion}\nTeléfono: ${cita.telefono}`);
+    const location = encodeURIComponent(cita.direccion || "No especificada");
+    
+    return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${text}&dates=${formatGoogleDate(startDate)}/${formatGoogleDate(endDate)}&details=${details}&location=${location}`;
+  };
+
   const verificarChoqueAgenda = (fecha: string, hora: string) => {
     return citas.find(c => c.estado === "En Reparación" && c.fecha === fecha && c.hora === hora);
   };
 
-  // === MODIFICADO: CONTROLADOR DE CAMBIO DE ESTADO CON RESET DE SELECTOR ===
   const handleEstadoChange = async (cita: any, nuevoEstado: string, selectElement: HTMLSelectElement) => {
     if (nuevoEstado === "Completado") { 
       setCitaActiva(cita); setShowCloseModal(true); 
     } else if (nuevoEstado === "En Reparación") {
-      // === ESCUDO ANTI-CHOQUES DE AGENDA ===
       const choque = verificarChoqueAgenda(cita.fecha, cita.hora);
       if (choque && choque.id !== cita.id) {
-        // Guardamos la información del choque para mostrarla en el modal
-        setChoqueInfo({
-          hora: cita.hora,
-          fecha: cita.fecha,
-          clienteChoque: choque.nombre
-        });
+        setChoqueInfo({ hora: cita.hora, fecha: cita.fecha, clienteChoque: choque.nombre });
         setShowChoqueModal(true);
-        // Regresamos el selector a su estado anterior visualmente
         selectElement.value = cita.estado || "Pendiente";
         return; 
       }
@@ -179,9 +186,7 @@ export default function AdminDashboard() {
     try {
       await updateDoc(doc(db, "citas", citaId), { hora: nuevaHora });
       registrarAuditoria(`Hora de intervención actualizada a [${nuevaHora}] para ${nombreCliente}`);
-    } catch (error) {
-      console.error("Error al actualizar hora");
-    }
+    } catch (error) { console.error("Error al actualizar hora"); }
   };
 
   const confirmarCierre = async () => {
@@ -193,7 +198,7 @@ export default function AdminDashboard() {
         modalidad: cierreData.modalidad, conformidadDigital: cierreData.modalidad === "En Domicilio" ? "Pendiente" : "N/A", 
         fechaCierre: new Date().toISOString()
       });
-      registrarAuditoria(`Cerró ticket [${citaActiva.nombre}] por ${cierreData.costoTotal} Bs. Mod: ${cierreData.modalidad}. Liberando hora del Radar.`);
+      registrarAuditoria(`Cerró ticket [${citaActiva.nombre}] por ${cierreData.costoTotal} Bs. Liberando hora del Radar.`);
       setShowCloseModal(false); setCierreData({ trabajoRealizado: "", costoTotal: "", modalidad: "Laboratorio" }); setCitaActiva(null);
     } catch (error) { alert("Error."); } finally { setGuardandoCierre(false); }
   };
@@ -216,15 +221,21 @@ export default function AdminDashboard() {
   const adelantosFlotantes = citas.reduce((acc: number, c: any) => (c.estado !== "Completado" && c.adelantoRealizado && c.montoAdelanto) ? acc + parseFloat(c.montoAdelanto) : acc, 0);
   const citasFiltradas = citas.filter((cita: any) => cita.nombre.toLowerCase().includes(searchTerm.toLowerCase()) || cita.id.toLowerCase().includes(searchTerm.toLowerCase()));
 
-  // FILTRADO DE CITAS BLOQUEADAS PARA EL RADAR
+  // === MODIFICADO: RADAR DE AGENDA GLOBAL (SOLO EN REPARACIÓN, ORDENADO CRONOLÓGICAMENTE) ===
   const citasBloqueadasAgenda = citas
-    .filter((c: any) => c.fecha === agendaDate && c.estado === "En Reparación")
-    .sort((a, b) => a.hora.localeCompare(b.hora));
+    .filter((c: any) => c.estado === "En Reparación")
+    .sort((a, b) => {
+      // Ordenar por fecha primero
+      if (a.fecha === b.fecha) {
+        // Si es la misma fecha, ordenar por hora
+        return a.hora.localeCompare(b.hora);
+      }
+      return a.fecha.localeCompare(b.fecha);
+    });
 
   // ==========================================================
-  // GENERADORES DE PDF - MOTOR DE ÉLITE Y COMPARTICIÓN NATIVA
+  // GENERADORES DE PDF
   // ==========================================================
-
   const sanitizarTelefono = (tel: string) => {
     if (!tel) return "No registrado";
     const limpio = tel.replace(/@.*$/, ''); 
@@ -233,14 +244,10 @@ export default function AdminDashboard() {
 
   const generarQRBase64 = async (texto: string): Promise<string> => {
     return new Promise((resolve) => {
-      const img = new window.Image();
-      img.crossOrigin = "Anonymous";
+      const img = new window.Image(); img.crossOrigin = "Anonymous";
       img.onload = () => {
-        const canvas = document.createElement("canvas");
-        canvas.width = img.width; canvas.height = img.height;
-        const ctx = canvas.getContext("2d");
-        if(ctx) ctx.drawImage(img, 0, 0);
-        resolve(canvas.toDataURL("image/png"));
+        const canvas = document.createElement("canvas"); canvas.width = img.width; canvas.height = img.height;
+        const ctx = canvas.getContext("2d"); if(ctx) ctx.drawImage(img, 0, 0); resolve(canvas.toDataURL("image/png"));
       };
       img.onerror = () => resolve(""); 
       img.src = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(texto)}&margin=1`;
@@ -248,143 +255,66 @@ export default function AdminDashboard() {
   };
 
   const drawHUDCorners = (doc: any, x: number, y: number, w: number, h: number, color: number[]) => {
-    doc.setDrawColor(color[0], color[1], color[2]);
-    doc.setLineWidth(0.4);
-    const l = 4;
-    doc.line(x, y, x + l, y); doc.line(x, y, x, y + l); 
-    doc.line(x + w, y, x + w - l, y); doc.line(x + w, y, x + w, y + l); 
-    doc.line(x, y + h, x + l, y + h); doc.line(x, y + h, x, y + h - l); 
-    doc.line(x + w, y + h, x + w - l, y + h); doc.line(x + w, y + h, x + w, y + h - l); 
+    doc.setDrawColor(color[0], color[1], color[2]); doc.setLineWidth(0.4); const l = 4;
+    doc.line(x, y, x + l, y); doc.line(x, y, x, y + l); doc.line(x + w, y, x + w - l, y); doc.line(x + w, y, x + w, y + l); 
+    doc.line(x, y + h, x + l, y + h); doc.line(x, y + h, x, y + h - l); doc.line(x + w, y + h, x + w - l, y + h); doc.line(x + w, y + h, x + w, y + h - l); 
   };
 
   const procesarYCompartirPDF = async (doc: any, nombreArchivo: string) => {
     try {
-      const pdfBlob = doc.output('blob');
-      const file = new File([pdfBlob], nombreArchivo, { type: 'application/pdf' });
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({
-          files: [file],
-          title: 'Documento OmniTech Solutions',
-          text: 'Adjunto el documento correspondiente a su servicio en OmniTech Solutions.'
-        });
-      } else {
-        doc.save(nombreArchivo);
-      }
-    } catch (error) {
-      console.error("Error compartiendo PDF, descargando en su lugar:", error);
-      doc.save(nombreArchivo);
-    }
+      const pdfBlob = doc.output('blob'); const file = new File([pdfBlob], nombreArchivo, { type: 'application/pdf' });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: 'Documento OmniTech', text: 'Adjunto el documento.' });
+      } else { doc.save(nombreArchivo); }
+    } catch (error) { doc.save(nombreArchivo); }
   };
 
-  // 1. PDF DE INGRESO
   const generarPDFIngreso = async (cita: any) => {
-    const doc = new jsPDF();
-    const telLimpio = sanitizarTelefono(cita.telefono);
-
+    const doc = new jsPDF(); const telLimpio = sanitizarTelefono(cita.telefono);
     doc.setFillColor(6, 11, 25); doc.rect(0, 0, 210, 50, 'F'); doc.setFillColor(34, 211, 238); doc.rect(0, 50, 210, 2, 'F');
     doc.setTextColor(34, 211, 238); doc.setFontSize(28); doc.setFont("helvetica", "bold"); doc.text("OMNITECH SOLUTIONS", 105, 25, { align: "center" });
     doc.setTextColor(148, 163, 184); doc.setFontSize(10); doc.setFont("helvetica", "normal"); doc.text("COMPROBANTE DE SERVICIO SOLICITADO", 105, 32, { align: "center" }); 
-
     doc.setFillColor(15, 23, 42); doc.setDrawColor(34, 211, 238); doc.setLineWidth(0.3); doc.roundedRect(65, 38, 80, 7, 1, 1, 'FD');
     doc.setTextColor(255, 255, 255); doc.setFontSize(8); doc.setFont("courier", "bold"); doc.text(`TICKET_ID :: ${cita.id.toUpperCase()}`, 105, 43, { align: "center" });
-
     doc.setFillColor(250, 252, 255); doc.rect(14, 62, 182, 28, 'F'); drawHUDCorners(doc, 14, 62, 182, 28, [34, 211, 238]);
     doc.setFillColor(15, 23, 42); doc.rect(14, 62, 182, 7, 'F'); doc.setTextColor(34, 211, 238); doc.setFontSize(8); doc.setFont("helvetica", "bold"); doc.text("[ PARÁMETROS DEL SOLICITANTE ]", 18, 67);
-    
-    doc.setTextColor(0, 0, 0); doc.setFontSize(9);
-    doc.setFont("helvetica", "bold"); doc.text("CLIENTE:", 18, 76); doc.setFont("helvetica", "normal"); doc.text(cita.nombre, 40, 76);
+    doc.setTextColor(0, 0, 0); doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.text("CLIENTE:", 18, 76); doc.setFont("helvetica", "normal"); doc.text(cita.nombre, 40, 76);
     doc.setFont("helvetica", "bold"); doc.text("CONTACTO:", 115, 76); doc.setFont("courier", "bold"); doc.text(telLimpio, 138, 76);
-    doc.setFont("helvetica", "bold"); doc.text("UBICACIÓN:", 18, 84); 
-    let dirBreve = cita.direccion || "No especificada"; if (dirBreve.length > 80) dirBreve = dirBreve.substring(0, 80) + "..."; doc.setFont("courier", "normal"); doc.text(dirBreve, 45, 84);
-
-    autoTable(doc, { 
-      startY: 96, headStyles: { fillColor: [6, 11, 25], textColor: [34, 211, 238], fontStyle: 'bold', fontSize: 9 }, 
-      bodyStyles: { fillColor: [250, 252, 255], textColor: [10, 10, 10], fontSize: 9 },
-      head: [['[ REPORTE DE INCIDENCIA PRELIMINAR ]']], body: [[cita.descripcion]], theme: 'grid', styles: { cellPadding: 6 }
-    });
-
+    doc.setFont("helvetica", "bold"); doc.text("UBICACIÓN:", 18, 84); let dirBreve = cita.direccion || "No especificada"; if (dirBreve.length > 80) dirBreve = dirBreve.substring(0, 80) + "..."; doc.setFont("courier", "normal"); doc.text(dirBreve, 45, 84);
+    autoTable(doc, { startY: 96, headStyles: { fillColor: [6, 11, 25], textColor: [34, 211, 238], fontStyle: 'bold', fontSize: 9 }, bodyStyles: { fillColor: [250, 252, 255], textColor: [10, 10, 10], fontSize: 9 }, head: [['[ REPORTE DE INCIDENCIA PRELIMINAR ]']], body: [[cita.descripcion]], theme: 'grid', styles: { cellPadding: 6 } });
     const finalY = (doc as any).lastAutoTable.finalY + 15; 
-    
     doc.setFillColor(245, 248, 250); doc.rect(14, finalY, 182, 12, 'F'); doc.setDrawColor(34, 211, 238); doc.setLineWidth(1.5); doc.line(14, finalY, 14, finalY + 12); 
     doc.setFontSize(10); doc.setTextColor(15, 23, 42); doc.setFont("helvetica", "bold"); doc.text("ESTADO FINANCIERO:", 18, finalY + 8);
-    
-    if (cita.adelantoRealizado) { doc.setTextColor(16, 185, 129); doc.text(`ADELANTO CONFIRMADO: ${cita.montoAdelanto} Bs. (Ref: ${cita.nroComprobante})`, 65, finalY + 8); 
-    } else { doc.setTextColor(220, 38, 38); doc.text(">> PAGO PENDIENTE DE ASIGNACIÓN", 65, finalY + 8); }
-
+    if (cita.adelantoRealizado) { doc.setTextColor(16, 185, 129); doc.text(`ADELANTO CONFIRMADO: ${cita.montoAdelanto} Bs.`, 65, finalY + 8); } else { doc.setTextColor(220, 38, 38); doc.text(">> PAGO PENDIENTE DE ASIGNACIÓN", 65, finalY + 8); }
     const footerY = 250;
-    const qrText = `[ OMNITECH SOLUTIONS ]\n====================================\nTICKET: ${cita.id}\nTITULAR: ${cita.nombre}\nFECHA: ${cita.fecha}\nESTADO: REGISTRADO\n====================================\nSu solicitud se encuentra en proceso.\nGracias por confiar en OmniTech.`;
+    const qrText = `[ OMNITECH SOLUTIONS ]\n====================================\nTICKET: ${cita.id}\nTITULAR: ${cita.nombre}\nFECHA: ${cita.fecha}\nESTADO: REGISTRADO\n====================================\nSu solicitud se encuentra en proceso.`;
     const base64QR = await generarQRBase64(qrText);
-    
     if (base64QR) { doc.addImage(base64QR, 'PNG', 14, footerY - 15, 32, 32); doc.setFontSize(6); doc.setTextColor(100); doc.setFont("courier", "bold"); doc.text("SELLO CRIPTOGRÁFICO", 30, footerY + 21, { align: "center" }); }
-
-    doc.setDrawColor(100); doc.setLineWidth(0.4); doc.line(75, footerY + 10, 125, footerY + 10);
-    doc.setTextColor(0); doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.text("FIRMA DEL CLIENTE", 100, footerY + 15, { align: "center" });
-    doc.setFontSize(7); doc.setFont("helvetica", "normal"); doc.setTextColor(100); doc.text("Conformidad de Solicitud de Servicio", 100, footerY + 19, { align: "center" });
-
-    doc.line(145, footerY + 10, 195, footerY + 10); doc.setTextColor(0); doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.text("MIGUEL ANGEL CUENCA C.", 170, footerY + 15, { align: "center" });
-    doc.setFontSize(7); doc.setFont("helvetica", "normal"); doc.setTextColor(100); doc.text("Director Operativo NOC - OmniTech", 170, footerY + 19, { align: "center" });
-
+    doc.setDrawColor(100); doc.setLineWidth(0.4); doc.line(75, footerY + 10, 125, footerY + 10); doc.setTextColor(0); doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.text("FIRMA DEL CLIENTE", 100, footerY + 15, { align: "center" }); doc.setFontSize(7); doc.setFont("helvetica", "normal"); doc.setTextColor(100); doc.text("Conformidad de Solicitud de Servicio", 100, footerY + 19, { align: "center" });
+    doc.line(145, footerY + 10, 195, footerY + 10); doc.setTextColor(0); doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.text("MIGUEL ANGEL CUENCA C.", 170, footerY + 15, { align: "center" }); doc.setFontSize(7); doc.setFont("helvetica", "normal"); doc.setTextColor(100); doc.text("Director Operativo NOC", 170, footerY + 19, { align: "center" });
     await procesarYCompartirPDF(doc, `OmniTech_Ingreso_${cita.nombre.replace(/\s+/g, '_')}.pdf`);
   };
 
-  // 2. PDF DE ENTREGA
   const generarPDFEntrega = async (cita: any) => {
     const doc = new jsPDF();
-    const costoFinal = parseFloat(cita.costoFinal || "0"); const adelanto = parseFloat(cita.montoAdelanto || "0"); const saldo = costoFinal - adelanto;
-    const telLimpio = sanitizarTelefono(cita.telefono);
-
-    doc.setFillColor(6, 11, 25); doc.rect(0, 0, 210, 50, 'F'); doc.setFillColor(16, 185, 129); doc.rect(0, 50, 210, 2, 'F');
-    doc.setTextColor(34, 211, 238); doc.setFontSize(28); doc.setFont("helvetica", "bold"); doc.text("OMNITECH SOLUTIONS", 105, 25, { align: "center" });
-    doc.setTextColor(200, 200, 200); doc.setFontSize(10); doc.setFont("helvetica", "normal"); doc.text("CERTIFICADO DE FINALIZACIÓN TÉCNICA", 105, 32, { align: "center" });
-
-    doc.setFillColor(15, 23, 42); doc.setDrawColor(16, 185, 129); doc.setLineWidth(0.3); doc.roundedRect(65, 38, 80, 7, 1, 1, 'FD');
-    doc.setTextColor(255, 255, 255); doc.setFontSize(8); doc.setFont("courier", "bold"); doc.text(`TICKET_ID :: ${cita.id.toUpperCase()}`, 105, 43, { align: "center" });
-
-    doc.setFillColor(250, 252, 255); doc.rect(14, 62, 182, 22, 'F'); drawHUDCorners(doc, 14, 62, 182, 22, [16, 185, 129]);
-    doc.setFillColor(15, 23, 42); doc.rect(14, 62, 182, 7, 'F'); doc.setTextColor(16, 185, 129); doc.setFontSize(8); doc.setFont("helvetica", "bold"); doc.text("[ DATOS DE RESOLUCIÓN ]", 18, 67);
-    
-    doc.setTextColor(0, 0, 0); doc.setFontSize(9);
-    doc.setFont("helvetica", "bold"); doc.text("TITULAR:", 18, 76); doc.setFont("helvetica", "normal"); doc.text(cita.nombre, 40, 76);
-    doc.setFont("helvetica", "bold"); doc.text("CONTACTO:", 115, 76); doc.setFont("courier", "bold"); doc.text(telLimpio, 138, 76);
-    doc.setFont("helvetica", "bold"); doc.text("CIERRE NOC:", 18, 82); doc.setFont("courier", "normal"); doc.text(new Date().toLocaleDateString(), 45, 82);
-    doc.setFont("helvetica", "bold"); doc.text("MODALIDAD:", 115, 82); doc.setFont("courier", "normal"); doc.text(cita.modalidad.toUpperCase(), 138, 82);
-
-    autoTable(doc, { 
-      startY: 90, headStyles: { fillColor: [16, 185, 129], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9 }, 
-      bodyStyles: { fillColor: [250, 252, 255], textColor: [15, 23, 42], fontSize: 9 },
-      head: [['[ REPORTE TÁCTICO DE INTERVENCIÓN - SOLUCIÓN ]']], body: [[cita.trabajoFinal]], theme: 'grid', styles: { cellPadding: 6 }
-    });
-
+    const costoFinal = parseFloat(cita.costoFinal || "0"); const adelanto = parseFloat(cita.montoAdelanto || "0"); const saldo = costoFinal - adelanto; const telLimpio = sanitizarTelefono(cita.telefono);
+    doc.setFillColor(6, 11, 25); doc.rect(0, 0, 210, 50, 'F'); doc.setFillColor(16, 185, 129); doc.rect(0, 50, 210, 2, 'F'); doc.setTextColor(34, 211, 238); doc.setFontSize(28); doc.setFont("helvetica", "bold"); doc.text("OMNITECH SOLUTIONS", 105, 25, { align: "center" }); doc.setTextColor(200, 200, 200); doc.setFontSize(10); doc.setFont("helvetica", "normal"); doc.text("CERTIFICADO DE FINALIZACIÓN TÉCNICA", 105, 32, { align: "center" });
+    doc.setFillColor(15, 23, 42); doc.setDrawColor(16, 185, 129); doc.setLineWidth(0.3); doc.roundedRect(65, 38, 80, 7, 1, 1, 'FD'); doc.setTextColor(255, 255, 255); doc.setFontSize(8); doc.setFont("courier", "bold"); doc.text(`TICKET_ID :: ${cita.id.toUpperCase()}`, 105, 43, { align: "center" });
+    doc.setFillColor(250, 252, 255); doc.rect(14, 62, 182, 22, 'F'); drawHUDCorners(doc, 14, 62, 182, 22, [16, 185, 129]); doc.setFillColor(15, 23, 42); doc.rect(14, 62, 182, 7, 'F'); doc.setTextColor(16, 185, 129); doc.setFontSize(8); doc.setFont("helvetica", "bold"); doc.text("[ DATOS DE RESOLUCIÓN ]", 18, 67);
+    doc.setTextColor(0, 0, 0); doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.text("TITULAR:", 18, 76); doc.setFont("helvetica", "normal"); doc.text(cita.nombre, 40, 76); doc.setFont("helvetica", "bold"); doc.text("CONTACTO:", 115, 76); doc.setFont("courier", "bold"); doc.text(telLimpio, 138, 76); doc.setFont("helvetica", "bold"); doc.text("CIERRE NOC:", 18, 82); doc.setFont("courier", "normal"); doc.text(new Date().toLocaleDateString(), 45, 82); doc.setFont("helvetica", "bold"); doc.text("MODALIDAD:", 115, 82); doc.setFont("courier", "normal"); doc.text(cita.modalidad.toUpperCase(), 138, 82);
+    autoTable(doc, { startY: 90, headStyles: { fillColor: [16, 185, 129], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9 }, bodyStyles: { fillColor: [250, 252, 255], textColor: [15, 23, 42], fontSize: 9 }, head: [['[ REPORTE TÁCTICO DE INTERVENCIÓN - SOLUCIÓN ]']], body: [[cita.trabajoFinal]], theme: 'grid', styles: { cellPadding: 6 } });
     const finalY = (doc as any).lastAutoTable.finalY + 15; 
-
-    doc.setFillColor(248, 250, 252); doc.rect(14, finalY, 182, 35, 'F'); drawHUDCorners(doc, 14, finalY, 182, 35, [15, 23, 42]);
-    doc.setFillColor(15, 23, 42); doc.rect(14, finalY, 182, 8, 'F'); doc.setTextColor(255, 255, 255); doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.text("[ MATRIZ DE LIQUIDACIÓN Y SALDOS ]", 18, finalY + 5.5);
-
-    doc.setTextColor(0, 0, 0); doc.setFontSize(10);
-    doc.setFont("helvetica", "bold"); doc.text("Costo Total de Operación:", 18, finalY + 16); doc.setFont("courier", "bold"); doc.text(`${costoFinal.toFixed(2)} Bs.`, 160, finalY + 16, { align: "right" });
-    doc.setFont("helvetica", "bold"); doc.text("Adelanto Registrado a Cuenta:", 18, finalY + 23); doc.setFont("courier", "bold"); doc.text(`- ${adelanto.toFixed(2)} Bs.`, 160, finalY + 23, { align: "right" });
-    doc.setDrawColor(200); doc.line(18, finalY + 27, 160, finalY + 27);
-    doc.setFont("helvetica", "black"); doc.setFontSize(11); doc.text("SALDO FINAL A CANCELAR:", 18, finalY + 32); doc.setFontSize(14); doc.setTextColor(220, 38, 38); doc.text(`${saldo > 0 ? saldo.toFixed(2) : "0.00"} Bs.`, 160, finalY + 33, { align: "right" });
-
+    doc.setFillColor(248, 250, 252); doc.rect(14, finalY, 182, 35, 'F'); drawHUDCorners(doc, 14, finalY, 182, 35, [15, 23, 42]); doc.setFillColor(15, 23, 42); doc.rect(14, finalY, 182, 8, 'F'); doc.setTextColor(255, 255, 255); doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.text("[ MATRIZ DE LIQUIDACIÓN Y SALDOS ]", 18, finalY + 5.5);
+    doc.setTextColor(0, 0, 0); doc.setFontSize(10); doc.setFont("helvetica", "bold"); doc.text("Costo Total de Operación:", 18, finalY + 16); doc.setFont("courier", "bold"); doc.text(`${costoFinal.toFixed(2)} Bs.`, 160, finalY + 16, { align: "right" }); doc.setFont("helvetica", "bold"); doc.text("Adelanto Registrado a Cuenta:", 18, finalY + 23); doc.setFont("courier", "bold"); doc.text(`- ${adelanto.toFixed(2)} Bs.`, 160, finalY + 23, { align: "right" }); doc.setDrawColor(200); doc.line(18, finalY + 27, 160, finalY + 27); doc.setFont("helvetica", "black"); doc.setFontSize(11); doc.text("SALDO FINAL A CANCELAR:", 18, finalY + 32); doc.setFontSize(14); doc.setTextColor(220, 38, 38); doc.text(`${saldo > 0 ? saldo.toFixed(2) : "0.00"} Bs.`, 160, finalY + 33, { align: "right" });
     const footerY = 250;
     const qrText = `[ OMNITECH SOLUTIONS ]\n====================================\nID TRANSACCIÓN: ${cita.id}\nTITULAR: ${cita.nombre}\nFECHA CIERRE: ${new Date().toLocaleDateString()}\nCOSTO FINAL: ${costoFinal} Bs.\n====================================\nServicio Concluido Exitosamente.`;
     const base64QR = await generarQRBase64(qrText);
     if (base64QR) { doc.addImage(base64QR, 'PNG', 14, footerY - 15, 32, 32); doc.setFontSize(6); doc.setTextColor(100); doc.setFont("courier", "bold"); doc.text("HASH VERIFICADO", 30, footerY + 21, { align: "center" }); }
-
     if (cita.modalidad === "En Domicilio") {
-      doc.setFillColor(241, 245, 249); doc.rect(70, footerY - 5, 125, 25, 'F'); 
-      doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.setTextColor(0); doc.text("[ VALIDACIÓN TÉCNICA REMOTA ]", 132.5, footerY + 2, { align: "center" });
-      doc.setFontSize(8); doc.setFont("helvetica", "normal"); doc.text("Certificación procesada vía enlace telemático en domicilio.", 132.5, footerY + 8, { align: "center" });
-      doc.setTextColor(16, 185, 129); doc.setFont("courier", "bold"); doc.text(`ESTADO DE RED: ${cita.conformidadDigital ? cita.conformidadDigital.toUpperCase() : "PENDIENTE DIGITAL"}`, 132.5, footerY + 14, { align: "center" });
+      doc.setFillColor(241, 245, 249); doc.rect(70, footerY - 5, 125, 25, 'F'); doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.setTextColor(0); doc.text("[ VALIDACIÓN TÉCNICA REMOTA ]", 132.5, footerY + 2, { align: "center" }); doc.setFontSize(8); doc.setFont("helvetica", "normal"); doc.text("Certificación procesada vía enlace telemático en domicilio.", 132.5, footerY + 8, { align: "center" }); doc.setTextColor(16, 185, 129); doc.setFont("courier", "bold"); doc.text(`ESTADO DE RED: PENDIENTE`, 132.5, footerY + 14, { align: "center" });
     } else { 
-      doc.setDrawColor(100); doc.setLineWidth(0.4); doc.line(75, footerY + 10, 125, footerY + 10);
-      doc.setTextColor(0); doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.text("FIRMA DEL CLIENTE", 100, footerY + 15, { align: "center" });
-      doc.setFontSize(7); doc.setFont("helvetica", "normal"); doc.setTextColor(100); doc.text("Conformidad de Finalización", 100, footerY + 19, { align: "center" });
-
-      doc.line(145, footerY + 10, 195, footerY + 10); doc.setTextColor(0); doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.text("MIGUEL ANGEL CUENCA C.", 170, footerY + 15, { align: "center" });
-      doc.setFontSize(7); doc.setFont("helvetica", "normal"); doc.setTextColor(100); doc.text("Director Operativo NOC - OmniTech", 170, footerY + 19, { align: "center" });
+      doc.setDrawColor(100); doc.setLineWidth(0.4); doc.line(75, footerY + 10, 125, footerY + 10); doc.setTextColor(0); doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.text("FIRMA DEL CLIENTE", 100, footerY + 15, { align: "center" }); doc.setFontSize(7); doc.setFont("helvetica", "normal"); doc.setTextColor(100); doc.text("Conformidad de Finalización", 100, footerY + 19, { align: "center" });
+      doc.line(145, footerY + 10, 195, footerY + 10); doc.setTextColor(0); doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.text("MIGUEL ANGEL CUENCA C.", 170, footerY + 15, { align: "center" }); doc.setFontSize(7); doc.setFont("helvetica", "normal"); doc.setTextColor(100); doc.text("Director Operativo NOC", 170, footerY + 19, { align: "center" });
     }
-
     await procesarYCompartirPDF(doc, `OmniTech_Entrega_${cita.nombre.replace(/\s+/g, '_')}.pdf`);
   };
 
@@ -392,7 +322,6 @@ export default function AdminDashboard() {
   if (!user) { 
     return ( 
       <div className="min-h-screen bg-[#030712] flex items-center justify-center p-4 relative overflow-hidden"> 
-        <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px] pointer-events-none"></div> 
         <div className="bg-[#0a1120]/90 p-8 md:p-10 rounded-2xl border border-cyan-500/40 backdrop-blur-xl shadow-[0_0_50px_rgba(34,211,238,0.15)] w-full max-w-md relative z-10"> 
           <div className="text-center mb-8"><h1 className="text-3xl font-black text-white tracking-widest">SISTEMA <span className="text-cyan-500">NOC</span></h1><p className="text-red-400 font-mono text-xs mt-2 font-bold tracking-widest border border-red-900/50 bg-red-950/30 py-1 rounded">ACCESO RESTRINGIDO</p></div> 
           <form onSubmit={handleLogin} className="space-y-6"> 
@@ -413,12 +342,8 @@ export default function AdminDashboard() {
       <div className="max-w-[1400px] mx-auto relative z-10">
         <header className="flex flex-col md:flex-row justify-between items-center bg-[#0a1120]/90 border border-slate-800 p-6 rounded-2xl backdrop-blur-xl mb-6 shadow-[0_0_30px_rgba(34,211,238,0.1)]">
           <div>
-            <h1 className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-600 tracking-wider uppercase">
-              OMNITECH SOLUTIONS
-            </h1>
-            <p className="text-slate-400 text-sm mt-1 font-mono tracking-widest">
-              Nivel de Acceso: <span className="ml-2 px-2 py-0.5 rounded font-bold bg-amber-900/50 text-amber-400 border border-amber-500">ADMINISTRADOR MAESTRO</span>
-            </p>
+            <h1 className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-600 tracking-wider uppercase">OMNITECH SOLUTIONS</h1>
+            <p className="text-slate-400 text-sm mt-1 font-mono tracking-widest">Nivel de Acceso: <span className="ml-2 px-2 py-0.5 rounded font-bold bg-amber-900/50 text-amber-400 border border-amber-500">ADMINISTRADOR MAESTRO</span></p>
           </div>
           <div className="mt-4 md:mt-0 flex items-center space-x-4">
             <Link href="/radar" className="px-4 py-2 border border-cyan-500/50 text-cyan-400 hover:bg-cyan-900/30 rounded-lg text-xs font-bold tracking-widest transition-all shadow-[0_0_15px_rgba(34,211,238,0.2)] flex items-center"><span className="w-2 h-2 bg-red-500 rounded-full animate-ping mr-2"></span> RADAR NOC</Link>
@@ -437,47 +362,57 @@ export default function AdminDashboard() {
         {activeTab === "monitoreo" && (
           <div className="animate-fade-in-up">
             
-            {/* === MODIFICADO: CONTENEDOR DEL BUSCADOR Y RADAR CON Z-INDEX MÁS ALTO === */}
             <div className="mb-4 flex flex-col sm:flex-row items-center justify-between bg-[#0a1120]/80 p-4 rounded-2xl border border-cyan-900/40 backdrop-blur-md shadow-lg gap-4 relative z-[200]">
               <div className="w-full sm:max-w-md">
                 <input type="text" placeholder="Buscar por Nombre o ID..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-[#030712] border border-slate-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-cyan-400 text-sm font-mono" />
               </div>
 
-              {/* RADAR DE AGENDA DESPLEGABLE */}
+              {/* === NUEVO: RADAR GLOBAL DESPLEGABLE === */}
               <div className="relative w-full sm:w-auto">
                 <button 
                   onClick={() => setShowAgenda(!showAgenda)} 
                   className={`w-full sm:w-auto px-6 py-3 rounded-lg text-xs font-bold tracking-widest transition-all flex items-center justify-center border ${showAgenda ? 'bg-cyan-900/50 border-cyan-400 text-white shadow-[0_0_15px_rgba(34,211,238,0.3)]' : 'bg-[#030712] border-slate-700 text-cyan-500 hover:border-cyan-500 hover:bg-cyan-950/30'}`}
                 >
                   <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
-                  RADAR DE AGENDA
+                  RADAR DE AGENDA GLOBAL
                 </button>
 
                 {showAgenda && (
-                  <div className="absolute right-0 top-full mt-2 w-full sm:w-80 bg-[#0a1120] border border-cyan-500/50 rounded-xl shadow-[0_0_50px_rgba(34,211,238,0.3)] p-4 animate-fade-in-up">
-                    <label className="block text-[10px] font-bold text-cyan-500 mb-2 uppercase tracking-widest border-b border-slate-800 pb-2">Verificar Choques de Horario</label>
-                    <input 
-                      type="date" 
-                      value={agendaDate} 
-                      onChange={(e) => setAgendaDate(e.target.value)} 
-                      className="w-full bg-[#030712] border border-slate-700 rounded px-3 py-2 text-white focus:outline-none focus:border-cyan-400 text-xs mb-3 [&::-webkit-calendar-picker-indicator]:invert"
-                    />
+                  <div className="absolute right-0 top-full mt-2 w-full sm:w-96 bg-[#0a1120] border border-cyan-500/50 rounded-xl shadow-[0_0_50px_rgba(34,211,238,0.3)] p-4 animate-fade-in-up">
+                    <label className="block text-[10px] font-bold text-cyan-500 mb-3 uppercase tracking-widest border-b border-slate-800 pb-2">Todas las Citas Selladas Activas</label>
                     
-                    <div className="max-h-48 overflow-y-auto pr-1">
+                    <div className="max-h-80 overflow-y-auto pr-1 space-y-3">
                       {citasBloqueadasAgenda.length === 0 ? (
                         <div className="text-center py-4 border border-dashed border-emerald-900 rounded bg-emerald-950/20">
-                          <p className="text-[10px] text-emerald-500 font-bold uppercase tracking-widest flex items-center justify-center"><svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path></svg> ZONA DESPEJADA</p>
-                          <p className="text-[9px] text-slate-500 mt-1">Sin reparaciones selladas para esta fecha.</p>
+                          <p className="text-[10px] text-emerald-500 font-bold uppercase tracking-widest flex items-center justify-center"><svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path></svg> AGENDA DESPEJADA</p>
+                          <p className="text-[9px] text-slate-500 mt-1">No hay reparaciones programadas activas.</p>
                         </div>
                       ) : (
-                        <div className="space-y-2">
-                          {citasBloqueadasAgenda.map(c => (
-                            <div key={c.id} className="flex justify-between items-center bg-blue-950/30 border border-blue-900/50 p-2 rounded">
-                              <span className="text-blue-400 font-black text-xs bg-[#030712] px-2 py-1 rounded border border-blue-900">{c.hora}</span>
-                              <span className="text-slate-300 text-[10px] font-bold truncate max-w-[140px] text-right">{c.nombre}</span>
+                        citasBloqueadasAgenda.map(c => (
+                          <div key={c.id} className="flex flex-col bg-blue-950/30 border border-blue-900/50 p-3 rounded hover:bg-blue-900/40 transition-colors">
+                            <div className="flex justify-between items-start mb-2">
+                              <div className="flex flex-col">
+                                <span className="text-cyan-400 font-bold text-[10px] tracking-widest mb-0.5">{c.fecha}</span>
+                                <span className="text-blue-400 font-black text-sm bg-[#030712] px-2 py-0.5 rounded border border-blue-900 w-max">{c.hora}</span>
+                              </div>
+                              <div className="flex flex-col items-end text-right">
+                                <span className="text-slate-200 text-xs font-bold truncate max-w-[150px]">{c.nombre}</span>
+                                <span className="text-slate-500 text-[9px] uppercase mt-1">ID: {c.id.substring(0,6)}...</span>
+                              </div>
                             </div>
-                          ))}
-                        </div>
+                            
+                            {/* === NUEVO: BOTÓN SINCRONIZAR ALARMA === */}
+                            <a 
+                              href={generarEnlaceCalendario(c)} 
+                              target="_blank" 
+                              rel="noopener noreferrer" 
+                              className="w-full bg-slate-900 hover:bg-blue-600 text-slate-300 hover:text-white border border-slate-700 hover:border-blue-500 text-[9px] font-bold py-1.5 rounded transition-all flex items-center justify-center mt-1"
+                            >
+                              <svg className="w-3 h-3 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                              SINCRONIZAR ALARMA EN CELULAR
+                            </a>
+                          </div>
+                        ))
                       )}
                     </div>
                   </div>
@@ -485,7 +420,7 @@ export default function AdminDashboard() {
               </div>
             </div>
             
-            {/* === MODIFICADO: CONTENEDOR DE LA TABLA CON Z-INDEX INFERIOR === */}
+            {/* CONTENEDOR DE LA TABLA */}
             <div className="bg-[#0a1120]/80 rounded-2xl border border-cyan-500/30 overflow-visible backdrop-blur-md shadow-2xl relative z-10">
               <div className="overflow-x-auto pb-32">
                 <table className="w-full text-left border-collapse min-w-[1000px]">
@@ -659,7 +594,6 @@ export default function AdminDashboard() {
         )}
       </div>
 
-      {/* === MODAL DE FINALIZACIÓN DE CITA === */}
       {showCloseModal && citaActiva && (
         <div className="fixed inset-0 z-[600] flex items-center justify-center p-4 bg-[#030712]/95 backdrop-blur-xl">
           <div className="bg-[#0a1120] border border-cyan-500/50 p-6 rounded-2xl max-w-lg w-full shadow-[0_0_80px_rgba(34,211,238,0.2)] transform animate-fade-in-up relative">
@@ -680,7 +614,7 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* === NUEVO: MODAL ALERTA ROJA - ESCUDO ANTI CHOQUES === */}
+      {/* === MODAL ALERTA ROJA - ESCUDO ANTI CHOQUES === */}
       {showChoqueModal && choqueInfo && (
         <div className="fixed inset-0 z-[600] flex items-center justify-center p-4 bg-red-950/80 backdrop-blur-sm animate-fade-in">
           <div className="bg-[#030712] border border-red-500 p-8 rounded-2xl max-w-md w-full shadow-[0_0_80px_rgba(239,68,68,0.4)] text-center relative overflow-hidden">
