@@ -111,7 +111,7 @@ export default function AdminDashboard() {
   const handleLogout = async () => { await signOut(auth); };
 
   // ==========================================================
-  // WHATSAPP: MOTOR DESPLEGABLE DE 3 NIVELES
+  // WHATSAPP: MENSAJES CORPORATIVOS Y ELABORADOS (EMOJIS)
   // ==========================================================
   const generarEnlaceWA = (cita: any, tipo: 'coordinacion' | 'ingreso' | 'finalizado') => {
     const num = cita.telefono.replace(/\D/g, ''); 
@@ -119,11 +119,11 @@ export default function AdminDashboard() {
     let texto = "";
 
     if (tipo === 'coordinacion') {
-      texto = `Hola ${cita.nombre}, somos *OmniTech Solutions*. Nos comunicamos para coordinar los detalles de su solicitud técnica.`;
+      texto = `👋 ¡Hola *${cita.nombre}*!\n\nSomos *OmniTech Solutions* 💻🔧. Nos comunicamos para coordinar los detalles de su solicitud técnica.\n\n📍 Por favor, ¿podría confirmarnos su ubicación exacta o enviarnos un punto GPS? Si tiene alguna indicación adicional para llegar, nos sería de gran ayuda.\n\nEstamos a su entera disposición para brindarle el mejor servicio. 🚀`;
     } else if (tipo === 'ingreso') {
-      texto = `Hola ${cita.nombre}, nos comunicamos de *OmniTech Solutions*.\n\nSu solicitud ha sido registrada exitosamente en nuestra Sala de Control. En un momento le adjuntaremos su *Comprobante de Servicio Solicitado* en formato PDF para su respaldo.\n\nID del Ticket: *${cita.id.toUpperCase()}*\n\n¡Gracias por elegirnos, estamos a su servicio!`;
+      texto = `👋 ¡Hola *${cita.nombre}*!\n\nLe informamos desde *OmniTech Solutions* 💻 que su equipo ha sido registrado exitosamente en nuestra Sala de Operaciones. ✅\n\n🆔 *Ticket:* ${cita.id.toUpperCase()}\n\nEn un momento le adjuntaremos por este medio su *Comprobante de Servicio Solicitado* (PDF) 📄 para su control y respaldo.\n\n¡Gracias por confiar en nuestros especialistas! 🛡️`;
     } else {
-      texto = `Hola ${cita.nombre}, le informamos desde *OmniTech Solutions* que el servicio técnico en su equipo ha concluido con éxito.\n\nEn un momento le enviaremos su *Certificado de Finalización Operativa* (PDF) con el detalle del trabajo y saldos.\n\nQuedamos a su entera disposición.`;
+      texto = `✅ ¡Excelentes noticias *${cita.nombre}*!\n\nDesde *OmniTech Solutions* 💻 le informamos que el servicio técnico en su equipo ha *concluido con éxito*. 🚀\n\nEn breve le enviaremos su *Certificado de Finalización Operativa* (PDF) 📄 con el detalle del trabajo realizado y la liquidación financiera correspondiente.\n\n🙏 Quedamos atentos para la entrega. ¡Gracias por preferirnos!`;
     }
     
     return `https://wa.me/${prefijo}${num}?text=${encodeURIComponent(texto)}`;
@@ -173,7 +173,7 @@ export default function AdminDashboard() {
   const citasFiltradas = citas.filter(cita => cita.nombre.toLowerCase().includes(searchTerm.toLowerCase()) || cita.id.toLowerCase().includes(searchTerm.toLowerCase()));
 
   // ==========================================================
-  // GENERADORES DE PDF - ÉPICO, FUTURISTA Y COMPARTICIÓN DIRECTA
+  // GENERADORES DE PDF - MOTOR DE ÉLITE Y COMPARTICIÓN NATIVA
   // ==========================================================
 
   const sanitizarTelefono = (tel: string) => {
@@ -208,21 +208,18 @@ export default function AdminDashboard() {
     doc.line(x + w, y + h, x + w - l, y + h); doc.line(x + w, y + h, x + w, y + h - l); 
   };
 
-  // Motor Inteligente para Compartir o Descargar PDF Automáticamente
+  // Motor para enviar/descargar el PDF automáticamente
   const procesarYCompartirPDF = async (doc: any, nombreArchivo: string) => {
     try {
       const pdfBlob = doc.output('blob');
       const file = new File([pdfBlob], nombreArchivo, { type: 'application/pdf' });
-      
-      // Si el navegador soporta compartir archivos nativamente (Celulares / Chrome moderno)
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
         await navigator.share({
           files: [file],
-          title: 'Documento Técnico OmniTech',
+          title: 'Documento OmniTech Solutions',
           text: 'Adjunto el documento correspondiente a su servicio técnico en OmniTech Solutions.'
         });
       } else {
-        // Fallback: Si está en una PC vieja, simplemente lo descarga
         doc.save(nombreArchivo);
       }
     } catch (error) {
@@ -236,7 +233,7 @@ export default function AdminDashboard() {
     const doc = new jsPDF();
     const telLimpio = sanitizarTelefono(cita.telefono);
 
-    // Cabecera
+    // Cabecera Épica (Sin Barras)
     doc.setFillColor(6, 11, 25); 
     doc.rect(0, 0, 210, 50, 'F');
     doc.setFillColor(34, 211, 238); 
@@ -250,7 +247,7 @@ export default function AdminDashboard() {
     doc.setTextColor(148, 163, 184);
     doc.setFontSize(10);
     doc.setFont("helvetica", "normal");
-    doc.text("COMPROBANTE DE SERVICIO SOLICITADO", 105, 32, { align: "center" }); 
+    doc.text("COMPROBANTE DE SERVICIO SOLICITADO", 105, 32, { align: "center" }); // TÍTULO CORREGIDO
 
     // ID Badge
     doc.setFillColor(15, 23, 42); 
@@ -333,7 +330,7 @@ export default function AdminDashboard() {
     doc.setFontSize(7); doc.setFont("helvetica", "normal"); doc.setTextColor(100);
     doc.text("Director Operativo NOC - OmniTech", 170, footerY + 19, { align: "center" });
 
-    // Ejecuta el motor inteligente
+    // Generar y Compartir/Descargar
     await procesarYCompartirPDF(doc, `OmniTech_Ingreso_${cita.nombre.replace(/\s+/g, '_')}.pdf`);
   };
 
@@ -345,7 +342,7 @@ export default function AdminDashboard() {
     const saldo = costoFinal - adelanto;
     const telLimpio = sanitizarTelefono(cita.telefono);
 
-    // Cabecera
+    // Cabecera Épica
     doc.setFillColor(6, 11, 25); 
     doc.rect(0, 0, 210, 50, 'F');
     doc.setFillColor(16, 185, 129); // Verde Esmeralda
@@ -456,7 +453,7 @@ export default function AdminDashboard() {
       doc.text("Director Operativo NOC - OmniTech", 170, footerY + 19, { align: "center" });
     }
 
-    // Ejecuta el motor inteligente
+    // Generar y Compartir/Descargar
     await procesarYCompartirPDF(doc, `OmniTech_Entrega_${cita.nombre.replace(/\s+/g, '_')}.pdf`);
   };
 
@@ -565,34 +562,51 @@ export default function AdminDashboard() {
                             <option value="Completado">Finalizar Equipo</option>
                           </select>
                         </td>
-                        <td className="p-4 text-center space-y-2">
-                          
-                          {/* BOTÓN WHATSAPP DESPLEGABLE CON OPCIÓN DE COORDINACIÓN */}
-                          <div className="relative group w-full">
-                            <button className="w-full bg-green-600/20 hover:bg-green-500 hover:text-black text-green-400 text-[10px] font-bold px-3 py-2 rounded transition-all border border-green-500/30 flex items-center justify-center text-center cursor-pointer shadow-[0_0_10px_rgba(34,197,94,0.1)]">
-                              <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path></svg>
-                              ENVIAR POR WA ▼
-                            </button>
-                            <div className="absolute right-0 top-full mt-1 w-full bg-[#0a1120] border border-green-500/30 rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 overflow-hidden flex flex-col">
-                              {/* NUEVA OPCIÓN DE COORDINACIÓN INICIAL */}
-                              <a href={generarEnlaceWA(cita, 'coordinacion')} target="_blank" rel="noopener noreferrer" className="px-3 py-3 text-[9px] font-bold text-green-400 hover:bg-green-900/50 border-b border-green-900/30 transition-colors">
-                                MSJ COORDINAR
-                              </a>
-                              <a href={generarEnlaceWA(cita, 'ingreso')} target="_blank" rel="noopener noreferrer" className="px-3 py-3 text-[9px] font-bold text-green-400 hover:bg-green-900/50 border-b border-green-900/30 transition-colors">
-                                MSJ INGRESO
-                              </a>
-                              {cita.estado === "Completado" && (
-                                <a href={generarEnlaceWA(cita, 'finalizado')} target="_blank" rel="noopener noreferrer" className="px-3 py-3 text-[9px] font-bold text-green-400 hover:bg-green-900/50 transition-colors">
-                                  MSJ FINALIZADO
-                                </a>
-                              )}
-                            </div>
-                          </div>
 
-                          <button onClick={() => generarPDFIngreso(cita)} className="w-full bg-cyan-900/30 hover:bg-cyan-600 text-cyan-400 hover:text-white text-[10px] font-bold px-3 py-2 rounded transition-all border border-cyan-700/50">PDF INGRESO</button>
-                          {cita.estado === "Completado" && (
-                            <button onClick={() => generarPDFEntrega(cita)} className="w-full bg-emerald-900/30 hover:bg-emerald-600 text-emerald-400 hover:text-white text-[10px] font-bold px-3 py-2 rounded transition-all border border-emerald-700/50">PDF FINALIZADO</button>
-                          )}
+                        {/* PANEL DE ACCIONES TÁCTICAS (REDISEÑO HUD PARA NO TAPAR NADA) */}
+                        <td className="p-4 align-top w-48">
+                          <div className="flex flex-col space-y-3">
+                            
+                            {/* Panel WhatsApp */}
+                            <div className="bg-[#030712] border border-green-900/50 p-2 rounded-lg shadow-inner">
+                              <p className="text-[8px] text-green-500 font-bold uppercase tracking-widest mb-1.5 flex items-center">
+                                <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path></svg>
+                                Enviar WhatsApp
+                              </p>
+                              <div className="flex flex-col space-y-1.5">
+                                <a href={generarEnlaceWA(cita, 'coordinacion')} target="_blank" rel="noopener noreferrer" className="w-full bg-green-600/10 hover:bg-green-500 hover:text-black text-green-400 text-[9px] font-bold px-2 py-1.5 rounded transition-all border border-green-500/30 text-center">
+                                  1. MSJ COORDINAR
+                                </a>
+                                <a href={generarEnlaceWA(cita, 'ingreso')} target="_blank" rel="noopener noreferrer" className="w-full bg-green-600/10 hover:bg-green-500 hover:text-black text-green-400 text-[9px] font-bold px-2 py-1.5 rounded transition-all border border-green-500/30 text-center">
+                                  2. MSJ INGRESO
+                                </a>
+                                {cita.estado === "Completado" && (
+                                  <a href={generarEnlaceWA(cita, 'finalizado')} target="_blank" rel="noopener noreferrer" className="w-full bg-green-600/10 hover:bg-green-500 hover:text-black text-green-400 text-[9px] font-bold px-2 py-1.5 rounded transition-all border border-green-500/30 text-center animate-pulse">
+                                    3. MSJ FINALIZADO
+                                  </a>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Panel PDF */}
+                            <div className="bg-[#030712] border border-cyan-900/50 p-2 rounded-lg shadow-inner">
+                              <p className="text-[8px] text-cyan-500 font-bold uppercase tracking-widest mb-1.5 flex items-center">
+                                <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg>
+                                Documentos
+                              </p>
+                              <div className="flex flex-col space-y-1.5">
+                                <button onClick={() => generarPDFIngreso(cita)} className="w-full bg-cyan-900/30 hover:bg-cyan-600 text-cyan-400 hover:text-white text-[9px] font-bold px-2 py-1.5 rounded transition-all border border-cyan-700/50">
+                                  PDF INGRESO
+                                </button>
+                                {cita.estado === "Completado" && (
+                                  <button onClick={() => generarPDFEntrega(cita)} className="w-full bg-emerald-900/30 hover:bg-emerald-600 text-emerald-400 hover:text-white text-[9px] font-bold px-2 py-1.5 rounded transition-all border border-emerald-700/50">
+                                    PDF FINALIZADO
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+
+                          </div>
                         </td>
                       </tr>
                     ))}
