@@ -13,6 +13,9 @@ export default function Home() {
   const [showModal, setShowModal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // NUEVO ESTADO: Ventana flotante de éxito para el embudo de WhatsApp
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+
   // Estados para las imágenes (Fotos)
   const [fotoProblema, setFotoProblema] = useState<string | null>(null);
   const [fotoComprobante, setFotoComprobante] = useState<string | null>(null);
@@ -75,7 +78,6 @@ export default function Home() {
       setValidandoPago(true);
       const imgUrl = URL.createObjectURL(e.target.files[0]);
       
-      // Simulamos 1.5 segundos de escaneo del comprobante para darle toque futurista
       setTimeout(() => {
         setFotoComprobante(imgUrl);
         setPagoVerificado(true);
@@ -125,13 +127,22 @@ export default function Home() {
         evidenciaProblema: fotoProblema ? "FOTO_ADJUNTA" : "N/A",
         fechaRegistro: new Date().toISOString()
       });
-      alert("✅ Asistencia programada. Nos contactaremos a la brevedad.");
+      
+      // Limpiamos los datos tras guardar en la base de datos
       setFormData({ nombre: "", telefono: "", descripcion: "", fecha: "", hora: "", direccion: "", coordenadas: "", adelanto: false, montoAdelanto: "" }); 
-      setFotoProblema(null); setFotoComprobante(null); setPagoVerificado(false); setShowModal(false);
+      setFotoProblema(null); setFotoComprobante(null); setPagoVerificado(false); 
+      setShowModal(false); 
+      
+      // ABRIMOS LA VENTANA FLOTANTE DE ÉXITO QUE CONDUCE AL WHATSAPP
+      setShowSuccessModal(true);
+
     } catch (error) { alert("❌ Error de red."); } finally { setIsSubmitting(false); }
   };
 
   const puedeConfirmar = formData.adelanto ? pagoVerificado : true;
+
+  // Enlace oficial de WhatsApp de OmniTech
+  const enlaceWACorporativo = "https://api.whatsapp.com/send?phone=59174267273&text=Hola%20OmniTech%20Solutions%2C%20vengo%20de%20la%20p%C3%A1gina%20web%20y%20deseo%20iniciar%20la%20coordinaci%C3%B3n%20de%20mi%20soporte%20t%C3%A9cnico.";
 
   return (
     <main className="min-h-screen bg-[#030712] text-white flex flex-col items-center justify-center p-4 md:p-8 selection:bg-cyan-500 selection:text-black relative overflow-x-hidden">
@@ -196,6 +207,12 @@ export default function Home() {
               <svg className="w-4 h-4 text-cyan-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
               <span className="text-xs font-bold tracking-widest text-cyan-400">COBERTURA: LA PAZ Y EL ALTO</span>
             </div>
+            
+            {/* NUEVO BOTÓN DE WHATSAPP VISIBLE EN LA PÁGINA PRINCIPAL */}
+            <a href={enlaceWACorporativo} target="_blank" rel="noopener noreferrer" className="mt-8 flex items-center justify-center bg-green-900/30 hover:bg-green-600 text-green-400 hover:text-white border border-green-500/50 px-6 py-3 rounded-xl font-bold tracking-widest transition-all shadow-[0_0_15px_rgba(34,197,94,0.2)] hover:shadow-[0_0_25px_rgba(34,197,94,0.4)] transform hover:-translate-y-1 w-max mx-auto lg:mx-0">
+              <svg className="w-5 h-5 mr-3" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51a12.8 12.8 0 00-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>
+              COMUNÍCATE CON OMNITECH
+            </a>
           </div>
         </div>
 
@@ -223,7 +240,6 @@ export default function Home() {
               </button>
             </div>
             
-            {/* NUEVO: ÁREA DE FOTO DEL PROBLEMA */}
             <div className="space-y-2">
               <label className="block text-xs font-semibold text-cyan-500/80 uppercase tracking-wider">Descripción de la Falla</label>
               <textarea rows={2} value={formData.descripcion} onChange={(e) => setFormData({...formData, descripcion: e.target.value})} className="w-full bg-[#030712] border border-slate-800 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-cyan-400 resize-none"></textarea>
@@ -285,7 +301,6 @@ export default function Home() {
                   </div>
                 </div>
                 
-                {/* NUEVO: BOTÓN ESTRICTO PARA SUBIR COMPROBANTE DE PAGO */}
                 <div className="bg-[#030712] p-4 rounded-xl border border-cyan-900/50 text-center relative overflow-hidden group">
                   {validandoPago ? (
                     <div className="py-2 text-cyan-400 font-mono text-xs font-bold animate-pulse">
@@ -335,6 +350,33 @@ export default function Home() {
                 ) : isSubmitting ? "PROCESANDO..." : "SÍ, AGENDAR CITA"}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* NUEVO MODAL: EMBUDO DE ÉXITO DE WHATSAPP (POST-REGISTRO) */}
+      {/* ========================================================= */}
+      {showSuccessModal && (
+        <div className="fixed inset-0 z-[500] flex items-center justify-center p-4 bg-[#030712]/95 backdrop-blur-xl animate-fade-in-up">
+          <div className="bg-[#0a1120] border border-green-500/50 p-8 rounded-3xl max-w-md w-full shadow-[0_0_80px_rgba(34,197,94,0.2)] text-center relative overflow-hidden">
+            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-3/4 h-2 bg-gradient-to-r from-transparent via-green-500 to-transparent shadow-[0_0_30px_rgba(34,197,94,1)]"></div>
+            
+            <div className="w-20 h-20 bg-green-900/30 rounded-full flex items-center justify-center mx-auto mb-6 border border-green-500/50 shadow-[0_0_30px_rgba(34,197,94,0.4)] animate-pulse">
+              <svg className="w-10 h-10 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>
+            </div>
+            
+            <h3 className="text-3xl font-black text-white mb-2 tracking-widest uppercase">¡CITA REGISTRADA!</h3>
+            <p className="text-slate-300 mb-8 text-sm leading-relaxed">Paso final: Haz clic abajo para iniciar la coordinación técnica de tu servicio en nuestro canal oficial.</p>
+            
+            <a href={enlaceWACorporativo} target="_blank" rel="noopener noreferrer" onClick={() => setShowSuccessModal(false)} className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 text-white font-black text-lg py-5 rounded-xl transition-all shadow-[0_0_30px_rgba(34,197,94,0.5)] hover:shadow-[0_0_50px_rgba(34,197,94,0.8)] flex items-center justify-center transform hover:-translate-y-1">
+              <svg className="w-7 h-7 mr-3" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51a12.8 12.8 0 00-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>
+              COORDINAR POR WHATSAPP
+            </a>
+            
+            <button onClick={() => setShowSuccessModal(false)} className="mt-6 text-slate-500 hover:text-slate-300 text-xs font-bold tracking-widest border-b border-transparent hover:border-slate-500 transition-all pb-1">
+              CERRAR Y VOLVER AL INICIO
+            </button>
           </div>
         </div>
       )}

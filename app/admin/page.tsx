@@ -120,11 +120,11 @@ export default function AdminDashboard() {
     let texto = "";
 
     if (tipo === 'coordinacion') {
-      texto = `Estimado/a ${cita.nombre},\n\nNos comunicamos de OmniTech Solutions para coordinar los detalles de su solicitud de servicio técnico.\n\nPor favor, ¿podría confirmarnos su ubicación exacta o enviarnos un punto GPS para programar la intervención?\n\nQuedamos a la espera de su confirmación.`;
+      texto = `Estimado/a ${cita.nombre},\n\nNos comunicamos de *OmniTech Solutions* para coordinar los detalles de su solicitud de servicio técnico.\n\nPor favor, ¿podría confirmarnos su ubicación exacta o enviarnos un punto GPS para programar el servicio técnico?\n\nQuedamos a la espera de su confirmación.`;
     } else if (tipo === 'ingreso') {
-      texto = `Estimado/a ${cita.nombre},\n\nLe informamos desde OmniTech Solutions que su equipo ha sido registrado formalmente en nuestro sistema bajo el Ticket ID: [ ${cita.id.toUpperCase()} ].\n\nA continuación, le enviaremos su Comprobante de Servicio Solicitado en formato PDF para su respectivo control.\n\nGracias por su confianza.`;
+      texto = `Estimado/a ${cita.nombre},\n\nLe informamos desde *OmniTech Solutions* que su equipo ha sido registrado formalmente en nuestro sistema bajo el Ticket ID: [ ${cita.id.toUpperCase()} ].\n\nA continuación, le enviaremos su Comprobante de Servicio Solicitado en formato PDF para su respectivo control.\n\nGracias por su confianza.`;
     } else {
-      texto = `Estimado/a ${cita.nombre},\n\nDesde OmniTech Solutions le comunicamos que el servicio técnico correspondiente a su solicitud ha sido completado.\n\nEn breve le remitiremos el Certificado de Finalización Técnica en formato PDF, detallando el trabajo realizado y la liquidación correspondiente.\n\nQuedamos a su entera disposición.`;
+      texto = `Estimado/a ${cita.nombre},\n\nDesde *OmniTech Solutions* le comunicamos que el servicio técnico correspondiente a su solicitud ha sido completado.\n\nEn breve le remitiremos el Certificado de Finalización Técnica en formato PDF, detallando el trabajo realizado y la liquidación correspondiente.\n\nQuedamos a su entera disposición.`;
     }
     
     return `https://api.whatsapp.com/send?phone=${num}&text=${encodeURIComponent(texto)}`;
