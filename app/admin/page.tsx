@@ -28,7 +28,7 @@ export default function AdminDashboard() {
   const [searchTerm, setSearchTerm] = useState(""); 
   const [copiedId, setCopiedId] = useState("");
 
-  // === ESTADOS PARA RADAR DE AGENDA ===
+  // === NUEVOS ESTADOS PARA RADAR DE AGENDA ===
   const [showAgenda, setShowAgenda] = useState(false);
   const [agendaDate, setAgendaDate] = useState(() => new Date().toISOString().split('T')[0]);
 
@@ -124,24 +124,51 @@ export default function AdminDashboard() {
     let texto = "";
 
     if (tipo === 'coordinacion') {
-      texto = `Estimado/a ${cita.nombre},\n\nNos comunicamos de OmniTech Solutions para coordinar los detalles de su solicitud de servicio técnico.\n\nPor favor, ¿podría confirmarnos su ubicación exacta o enviarnos un punto GPS para programar la intervención?\n\nQuedamos a la espera de su confirmación.`;
+      texto = `Estimado/a ${cita.nombre},\n\nNos comunicamos de *OmniTech Solutions* para coordinar los detalles de su solicitud de servicio técnico.\n\nPor favor, ¿podría confirmarnos su ubicación exacta o enviarnos un punto GPS para programar el servicio técnico?\n\nQuedamos a la espera de su confirmación.`;
     } else if (tipo === 'ingreso') {
-      texto = `Estimado/a ${cita.nombre},\n\nLe informamos desde OmniTech Solutions que su equipo ha sido registrado formalmente en nuestro sistema bajo el Ticket ID: [ ${cita.id.toUpperCase()} ].\n\nA continuación, le enviaremos su Comprobante de Servicio Solicitado en formato PDF para su respectivo control.\n\nGracias por su confianza.`;
+      texto = `Estimado/a ${cita.nombre},\n\nLe informamos desde *OmniTech Solutions* que su equipo ha sido registrado formalmente en nuestro sistema bajo el Ticket ID: [ ${cita.id.toUpperCase()} ].\n\nA continuación, le enviaremos su Comprobante de Servicio Solicitado en formato PDF para su respectivo control.\n\nGracias por su confianza.`;
     } else {
-      texto = `Estimado/a ${cita.nombre},\n\nDesde OmniTech Solutions le comunicamos que el servicio técnico correspondiente a su solicitud ha sido completado.\n\nEn breve le remitiremos el Certificado de Finalización Técnica en formato PDF, detallando el trabajo realizado y la liquidación correspondiente.\n\nQuedamos a su entera disposición.`;
+      texto = `Estimado/a ${cita.nombre},\n\nDesde *OmniTech Solutions* le comunicamos que el servicio técnico correspondiente a su solicitud ha sido completado.\n\nEn breve le remitiremos el Certificado de Finalización Técnica en formato PDF, detallando el trabajo realizado y la liquidación correspondiente.\n\nQuedamos a su entera disposición.`;
     }
     
     return `https://api.whatsapp.com/send?phone=${num}&text=${encodeURIComponent(texto)}`;
   };
 
+  // === NUEVO: FUNCIÓN PARA VERIFICAR CHOQUES DE HORARIO ===
+  const verificarChoqueAgenda = (fecha: string, hora: string) => {
+    return citas.find(c => c.estado === "En Reparación" && c.fecha === fecha && c.hora === hora);
+  };
+
   const handleEstadoChange = async (cita: any, nuevoEstado: string) => {
     if (nuevoEstado === "Completado") { 
       setCitaActiva(cita); setShowCloseModal(true); 
+    } else if (nuevoEstado === "En Reparación") {
+      // === NUEVO: ESCUDO ANTI-CHOQUES DE AGENDA ===
+      const choque = verificarChoqueAgenda(cita.fecha, cita.hora);
+      if (choque && choque.id !== cita.id) {
+        alert(`⚠️ ALERTA DE SISTEMA NOC:\n\nChoque Operativo Detectado. Ya tienes una intervención sellada a las ${cita.hora} el día ${cita.fecha} para el cliente "${choque.nombre}".\n\nPor favor, modifica la hora de esta cita antes de iniciar la reparación.`);
+        return; 
+      }
+      try { 
+        await updateDoc(doc(db, "citas", cita.id), { estado: nuevoEstado }); 
+        registrarAuditoria(`Selló hora [${cita.hora}] e inició reparación para el ticket [${cita.nombre}]`);
+      } catch (error) { alert("Error al actualizar estado."); } 
     } else { 
       try { 
         await updateDoc(doc(db, "citas", cita.id), { estado: nuevoEstado }); 
         registrarAuditoria(`Cambió estado del ticket [${cita.nombre}] a: ${nuevoEstado}`);
       } catch (error) { alert("Error al actualizar estado."); } 
+    }
+  };
+
+  // === NUEVO: FUNCIÓN PARA ACTUALIZAR LA HORA EN LA BASE DE DATOS ===
+  const actualizarHora = async (citaId: string, nuevaHora: string, nombreCliente: string) => {
+    if(!nuevaHora) return;
+    try {
+      await updateDoc(doc(db, "citas", citaId), { hora: nuevaHora });
+      registrarAuditoria(`Hora de intervención actualizada a [${nuevaHora}] para ${nombreCliente}`);
+    } catch (error) {
+      console.error("Error al actualizar hora");
     }
   };
 
@@ -154,20 +181,9 @@ export default function AdminDashboard() {
         modalidad: cierreData.modalidad, conformidadDigital: cierreData.modalidad === "En Domicilio" ? "Pendiente" : "N/A", 
         fechaCierre: new Date().toISOString()
       });
-      registrarAuditoria(`Cerró ticket [${citaActiva.nombre}] por ${cierreData.costoTotal} Bs. Mod: ${cierreData.modalidad}`);
+      registrarAuditoria(`Cerró ticket [${citaActiva.nombre}] por ${cierreData.costoTotal} Bs. Mod: ${cierreData.modalidad}. Liberando hora del Radar.`);
       setShowCloseModal(false); setCierreData({ trabajoRealizado: "", costoTotal: "", modalidad: "Laboratorio" }); setCitaActiva(null);
     } catch (error) { alert("Error."); } finally { setGuardandoCierre(false); }
-  };
-
-  // NUEVO: Función para actualizar la hora sellada
-  const actualizarHora = async (citaId: string, nuevaHora: string, nombreCliente: string) => {
-    if(!nuevaHora) return;
-    try {
-      await updateDoc(doc(db, "citas", citaId), { hora: nuevaHora });
-      registrarAuditoria(`Hora de intervención actualizada a [${nuevaHora}] para ${nombreCliente}`);
-    } catch (error) {
-      console.error("Error al actualizar hora");
-    }
   };
 
   const copiarID = (id: string) => { navigator.clipboard.writeText(id); setCopiedId(id); setTimeout(() => setCopiedId(""), 2000); };
@@ -188,7 +204,7 @@ export default function AdminDashboard() {
   const adelantosFlotantes = citas.reduce((acc: number, c: any) => (c.estado !== "Completado" && c.adelantoRealizado && c.montoAdelanto) ? acc + parseFloat(c.montoAdelanto) : acc, 0);
   const citasFiltradas = citas.filter((cita: any) => cita.nombre.toLowerCase().includes(searchTerm.toLowerCase()) || cita.id.toLowerCase().includes(searchTerm.toLowerCase()));
 
-  // Lógica del Radar de Agenda (Filtrar por En Reparación y Fecha)
+  // === NUEVO: FILTRADO DE CITAS BLOQUEADAS PARA EL RADAR ===
   const citasBloqueadasAgenda = citas
     .filter((c: any) => c.fecha === agendaDate && c.estado === "En Reparación")
     .sort((a, b) => a.hora.localeCompare(b.hora));
@@ -541,8 +557,8 @@ export default function AdminDashboard() {
               <div className="relative w-full sm:max-w-md">
                 <input type="text" placeholder="Buscar por Nombre o ID..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-[#030712] border border-slate-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-cyan-400 text-sm font-mono" />
               </div>
-              
-              {/* NUEVO: RADAR DE AGENDA DESPLEGABLE */}
+
+              {/* === NUEVO: BOTÓN Y PANEL DESPLEGABLE DEL RADAR DE AGENDA === */}
               <div className="relative w-full sm:w-auto">
                 <button 
                   onClick={() => setShowAgenda(!showAgenda)} 
@@ -553,8 +569,8 @@ export default function AdminDashboard() {
                 </button>
 
                 {showAgenda && (
-                  <div className="absolute right-0 top-full mt-2 w-full sm:w-80 bg-[#0a1120] border border-cyan-500/50 rounded-xl shadow-[0_0_30px_rgba(34,211,238,0.2)] z-50 p-4 animate-fade-in-up">
-                    <label className="block text-[10px] font-bold text-cyan-500 mb-2 uppercase tracking-widest border-b border-slate-800 pb-2">Filtrar Bloqueos por Fecha</label>
+                  <div className="absolute right-0 top-full mt-2 w-full sm:w-80 bg-[#0a1120] border border-cyan-500/50 rounded-xl shadow-[0_0_50px_rgba(34,211,238,0.3)] z-50 p-4 animate-fade-in-up">
+                    <label className="block text-[10px] font-bold text-cyan-500 mb-2 uppercase tracking-widest border-b border-slate-800 pb-2">Verificar Choques de Horario</label>
                     <input 
                       type="date" 
                       value={agendaDate} 
@@ -564,9 +580,9 @@ export default function AdminDashboard() {
                     
                     <div className="max-h-48 overflow-y-auto pr-1">
                       {citasBloqueadasAgenda.length === 0 ? (
-                        <div className="text-center py-4 border border-dashed border-slate-700 rounded bg-[#030712]">
-                          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">ZONA DESPEJADA</p>
-                          <p className="text-[9px] text-slate-600 mt-1">Sin intervenciones marcadas para esta fecha.</p>
+                        <div className="text-center py-4 border border-dashed border-emerald-900 rounded bg-emerald-950/20">
+                          <p className="text-[10px] text-emerald-500 font-bold uppercase tracking-widest flex items-center justify-center"><svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path></svg> ZONA DESPEJADA</p>
+                          <p className="text-[9px] text-slate-500 mt-1">Sin reparaciones selladas para esta fecha.</p>
                         </div>
                       ) : (
                         <div className="space-y-2">
@@ -584,8 +600,9 @@ export default function AdminDashboard() {
               </div>
             </div>
             
-            <div className="bg-[#0a1120]/80 rounded-2xl border border-cyan-500/30 overflow-hidden backdrop-blur-md shadow-2xl">
-              <div className="overflow-x-auto">
+            {/* === AVISO TÁCTICO: Se cambió overflow-hidden por overflow-visible para que el menú de la tabla no se corte === */}
+            <div className="bg-[#0a1120]/80 rounded-2xl border border-cyan-500/30 overflow-visible backdrop-blur-md shadow-2xl relative z-10">
+              <div className="overflow-x-auto pb-32"> {/* Espacio inferior (pb-32) para que los menús tengan donde caer sin scroll */}
                 <table className="w-full text-left border-collapse min-w-[1000px]">
                   <thead>
                     <tr className="bg-slate-900/80 border-b border-cyan-500/30 text-cyan-500 uppercase text-[10px] font-black tracking-widest">
@@ -597,28 +614,32 @@ export default function AdminDashboard() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800/50">
-                    {citasFiltradas.map((cita: any) => (
-                      <tr key={cita.id} className="hover:bg-slate-800/30 transition-colors group">
+                    {citasFiltradas.map((cita: any) => {
+                      const isLocked = cita.estado === "En Reparación";
+                      return (
+                      <tr key={cita.id} className={`hover:bg-slate-800/30 transition-colors group ${isLocked ? 'bg-blue-950/10' : ''}`}>
                         
                         <td className="p-4">
                           <p className="font-bold text-white text-base mb-0.5">{cita.nombre}</p>
                           <p className="text-[10px] text-slate-400 font-mono mb-2">ID: {cita.id}</p>
                           
                           <div className="flex flex-col space-y-2">
-                            {/* NUEVO: HORA EDITABLE (SE GUARDA AL QUITAR EL FOCO) */}
-                            <div className="flex items-center space-x-2 text-slate-400 text-xs font-mono bg-slate-950 px-2 py-1 rounded border border-slate-800 w-max">
+                            {/* === NUEVO: HORA EDITABLE Y BLOQUEABLE === */}
+                            <div className={`flex items-center space-x-2 text-xs font-mono px-2 py-1 rounded border w-max ${isLocked ? 'bg-blue-950/50 border-blue-900/50 text-blue-400' : 'bg-slate-950 border-slate-800 text-slate-400'}`}>
                               <span>{cita.fecha} |</span>
                               <input 
                                 type="time"
                                 defaultValue={cita.hora || ""}
+                                disabled={isLocked}
                                 onBlur={(e) => {
-                                  if(e.target.value && e.target.value !== cita.hora) {
+                                  if(!isLocked && e.target.value && e.target.value !== cita.hora) {
                                     actualizarHora(cita.id, e.target.value, cita.nombre);
                                   }
                                 }}
-                                className="bg-transparent text-cyan-400 font-bold focus:outline-none focus:border-cyan-400 border-b border-dashed border-slate-600 hover:border-cyan-500 cursor-pointer px-1 [&::-webkit-calendar-picker-indicator]:invert"
-                                title="Modificar Hora Exacta Acordada"
+                                className={`bg-transparent font-bold focus:outline-none focus:border-cyan-400 border-b border-dashed px-1 [&::-webkit-calendar-picker-indicator]:invert ${isLocked ? 'border-transparent text-blue-400 cursor-not-allowed opacity-80' : 'border-slate-600 text-cyan-400 hover:border-cyan-500 cursor-pointer'}`}
+                                title={isLocked ? "Hora Sellada. Imposible modificar durante reparación." : "Modificar Hora Exacta Acordada"}
                               />
+                              {isLocked && <svg className="w-3 h-3 text-blue-500 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>}
                             </div>
                             
                             {cita.coordenadas && cita.coordenadas.trim() !== "" ? (
@@ -647,25 +668,39 @@ export default function AdminDashboard() {
                           ) : <span className="text-slate-600 text-xs font-mono font-bold">PAGO PENDIENTE</span>}
                         </td>
                         <td className="p-4">
-                          <span className={`px-3 py-1.5 rounded text-[10px] font-black tracking-wider border block w-max mb-2 ${cita.estado === "Pendiente" ? "bg-amber-950/50 text-amber-400" : cita.estado === "En Reparación" ? "bg-blue-950/50 text-blue-400" : "bg-emerald-950/50 text-emerald-400"}`}>{cita.estado ? cita.estado.toUpperCase() : "PENDIENTE"}</span>
+                          <span className={`px-3 py-1.5 rounded text-[10px] font-black tracking-wider border block w-max mb-2 ${cita.estado === "Pendiente" ? "bg-amber-950/50 text-amber-400" : cita.estado === "En Reparación" ? "bg-blue-950/50 text-blue-400 shadow-[0_0_10px_rgba(59,130,246,0.3)] animate-pulse" : "bg-emerald-950/50 text-emerald-400"}`}>{cita.estado ? cita.estado.toUpperCase() : "PENDIENTE"}</span>
                           <select className="block w-full bg-[#030712] border border-slate-700 text-slate-300 text-[10px] rounded px-1 py-1 focus:outline-none focus:border-cyan-500 cursor-pointer" value={cita.estado || "Pendiente"} onChange={(e) => handleEstadoChange(cita, e.target.value)}>
                             <option value="Pendiente">Marcar Pendiente</option>
-                            <option value="En Reparación">Iniciar Reparación</option>
+                            <option value="En Reparación">Iniciar Reparación (Sellar Hora)</option>
                             <option value="Completado">Finalizar Equipo</option>
                           </select>
                         </td>
                         <td className="p-4 align-top w-72">
-                          <div className="grid grid-cols-2 gap-3">
+                          <div className="grid grid-cols-2 gap-3 relative">
+                            {/* EL MENÚ DESPLEGABLE TÁCTICO ORIGINAL INTACTO */}
                             <div className="bg-[#030712] border border-green-900/50 p-2 rounded-lg shadow-inner flex flex-col justify-between">
                               <p className="text-[8px] text-green-500 font-bold uppercase tracking-widest mb-2 text-center">Mensajería WA</p>
-                              <div className="flex flex-col space-y-1.5">
-                                <a href={generarEnlaceWA(cita, 'coordinacion')} target="_blank" rel="noopener noreferrer" className="w-full bg-green-900/30 hover:bg-green-600 text-green-400 hover:text-white text-[9px] font-bold px-1 py-1.5 rounded transition-all border border-green-700/50 text-center">COORDINAR</a>
-                                <a href={generarEnlaceWA(cita, 'ingreso')} target="_blank" rel="noopener noreferrer" className="w-full bg-green-900/30 hover:bg-green-600 text-green-400 hover:text-white text-[9px] font-bold px-1 py-1.5 rounded transition-all border border-green-700/50 text-center">INGRESO</a>
-                                {cita.estado === "Completado" && (
-                                  <a href={generarEnlaceWA(cita, 'finalizado')} target="_blank" rel="noopener noreferrer" className="w-full bg-emerald-900/40 hover:bg-emerald-600 text-emerald-400 hover:text-white text-[9px] font-bold px-1 py-1.5 rounded transition-all border border-emerald-500 text-center shadow-[0_0_10px_rgba(16,185,129,0.3)]">FINALIZADO</a>
-                                )}
+                              <div className="flex flex-col space-y-1.5 relative group">
+                                <button className="w-full bg-green-900/30 hover:bg-green-600 text-green-400 hover:text-white text-[9px] font-bold px-1 py-1.5 rounded transition-all border border-green-700/50 text-center flex items-center justify-center cursor-pointer shadow-[0_0_10px_rgba(34,197,94,0.1)]">
+                                  ENVIAR POR WA ▼
+                                </button>
+                                {/* AQUÍ ES DONDE OCURRÍA EL CORTE. LA SOLUCIÓN ESTÁ EN EL div de la tabla que ahora es overflow-visible y tiene pb-32 */}
+                                <div className="absolute left-0 top-full mt-1 w-full bg-[#0a1120] border border-green-500/30 rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-[100] flex flex-col pointer-events-none group-hover:pointer-events-auto">
+                                  <a href={generarEnlaceWA(cita, 'coordinacion')} target="_blank" rel="noopener noreferrer" className="px-3 py-3 text-[9px] font-bold text-green-400 hover:bg-green-900/50 border-b border-green-900/30 transition-colors text-center">
+                                    MSJ COORDINAR
+                                  </a>
+                                  <a href={generarEnlaceWA(cita, 'ingreso')} target="_blank" rel="noopener noreferrer" className="px-3 py-3 text-[9px] font-bold text-green-400 hover:bg-green-900/50 border-b border-green-900/30 transition-colors text-center">
+                                    MSJ INGRESO
+                                  </a>
+                                  {cita.estado === "Completado" && (
+                                    <a href={generarEnlaceWA(cita, 'finalizado')} target="_blank" rel="noopener noreferrer" className="px-3 py-3 text-[9px] font-bold text-green-400 hover:bg-green-900/50 transition-colors text-center">
+                                      MSJ FINALIZADO
+                                    </a>
+                                  )}
+                                </div>
                               </div>
                             </div>
+                            
                             <div className="bg-[#030712] border border-cyan-900/50 p-2 rounded-lg shadow-inner flex flex-col justify-between">
                               <p className="text-[8px] text-cyan-500 font-bold uppercase tracking-widest mb-2 text-center">Documentos</p>
                               <div className="flex flex-col space-y-1.5 h-full justify-end">
@@ -679,7 +714,7 @@ export default function AdminDashboard() {
                         </td>
 
                       </tr>
-                    ))}
+                    )})}
                   </tbody>
                 </table>
               </div>
@@ -757,13 +792,6 @@ export default function AdminDashboard() {
       {showCloseModal && citaActiva && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#030712]/95 backdrop-blur-xl">
           <div className="bg-[#0a1120] border border-cyan-500/50 p-6 rounded-2xl max-w-lg w-full shadow-[0_0_80px_rgba(34,211,238,0.2)] transform animate-fade-in-up relative">
-            <button 
-              onClick={() => setShowCloseModal(false)}
-              className="absolute top-4 right-4 text-slate-500 hover:text-red-500 transition-colors focus:outline-none"
-            >
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-            </button>
-
             <h3 className="text-xl font-black text-white mb-4 tracking-widest border-b border-slate-800 pb-3 flex items-center pr-8">
               <span className="w-2 h-2 bg-cyan-500 rounded-full mr-3 animate-pulse"></span> 
               REPORTE DE FINALIZACIÓN
