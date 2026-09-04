@@ -117,9 +117,14 @@ export default function AdminDashboard() {
   };
   const handleLogout = async () => { await signOut(auth); };
 
+  // === MODIFICADO: FUNCIÓN WHATSAPP REPARADA Y CON INSTRUCCIÓN DE PAGO ===
   const generarEnlaceWA = (cita: any, tipo: 'coordinacion' | 'ingreso' | 'finalizado') => {
-    let num = cita.telefono ? String(cita.telefono).replace(/@.*$/, '').replace(/\D/g, '') : '';
-    if (num.length === 8) { num = '591' + num; }
+    // 1. Limpiamos cualquier rastro que no sea número
+    let numStr = cita.telefono ? String(cita.telefono).replace(/\D/g, '') : '';
+    // 2. Si el cliente anotó el número con el 591 al principio, se lo quitamos temporalmente
+    numStr = numStr.replace(/^591/, '');
+    // 3. Ahora le forzamos el 591 oficial. Esto garantiza que WhatsApp reconozca el contacto directo siempre.
+    let num = '591' + numStr;
 
     let texto = "";
 
@@ -128,7 +133,7 @@ export default function AdminDashboard() {
     } else if (tipo === 'ingreso') {
       texto = `Estimado/a ${cita.nombre},\n\nLe informamos desde *OmniTech Solutions* que su equipo ha sido registrado formalmente en nuestro sistema bajo el Ticket ID: [ ${cita.id.toUpperCase()} ].\n\nA continuación, le enviaremos su Comprobante de Servicio Solicitado en formato PDF para su respectivo control.\n\nGracias por su confianza.`;
     } else {
-      texto = `Estimado/a ${cita.nombre},\n\nDesde *OmniTech Solutions* le comunicamos que el servicio técnico correspondiente a su solicitud ha sido completado.\n\nEn breve le remitiremos el Certificado de Finalización Técnica en formato PDF, detallando el trabajo realizado y la liquidación correspondiente.\n\nQuedamos a su entera disposición.`;
+      texto = `Estimado/a ${cita.nombre},\n\nDesde *OmniTech Solutions* le comunicamos que el servicio técnico correspondiente a su solicitud ha sido completado.\n\nEn breve le remitiremos el Certificado de Finalización Técnica en formato PDF, detallando el trabajo realizado y la liquidación correspondiente.\n\n*Puede realizar el pago correspondiente escaneando el código QR oficial de pago que viene adjunto en la parte inferior de su PDF.* Quedamos a su entera disposición.`;
     }
     
     return `https://api.whatsapp.com/send?phone=${num}&text=${encodeURIComponent(texto)}`;
@@ -221,13 +226,11 @@ export default function AdminDashboard() {
   const adelantosFlotantes = citas.reduce((acc: number, c: any) => (c.estado !== "Completado" && c.adelantoRealizado && c.montoAdelanto) ? acc + parseFloat(c.montoAdelanto) : acc, 0);
   const citasFiltradas = citas.filter((cita: any) => cita.nombre.toLowerCase().includes(searchTerm.toLowerCase()) || cita.id.toLowerCase().includes(searchTerm.toLowerCase()));
 
-  // === MODIFICADO: RADAR DE AGENDA GLOBAL (SOLO EN REPARACIÓN, ORDENADO CRONOLÓGICAMENTE) ===
+  // RADAR DE AGENDA GLOBAL 
   const citasBloqueadasAgenda = citas
     .filter((c: any) => c.estado === "En Reparación")
     .sort((a, b) => {
-      // Ordenar por fecha primero
       if (a.fecha === b.fecha) {
-        // Si es la misma fecha, ordenar por hora
         return a.hora.localeCompare(b.hora);
       }
       return a.fecha.localeCompare(b.fecha);
@@ -251,6 +254,19 @@ export default function AdminDashboard() {
       };
       img.onerror = () => resolve(""); 
       img.src = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(texto)}&margin=1`;
+    });
+  };
+
+  // === NUEVO: FUNCIÓN PARA CONVERTIR EL QR LOCAL DE PAGOS EN BASE64 PARA EL PDF ===
+  const getQRPagoBase64 = async (): Promise<string> => {
+    return new Promise((resolve) => {
+      const img = new window.Image(); img.crossOrigin = "Anonymous";
+      img.onload = () => {
+        const canvas = document.createElement("canvas"); canvas.width = img.width; canvas.height = img.height;
+        const ctx = canvas.getContext("2d"); if(ctx) ctx.drawImage(img, 0, 0); resolve(canvas.toDataURL("image/png"));
+      };
+      img.onerror = () => resolve(""); 
+      img.src = `/qr.png`; // <- Usa la misma imagen de QR de pago que subiste
     });
   };
 
@@ -284,7 +300,7 @@ export default function AdminDashboard() {
     const finalY = (doc as any).lastAutoTable.finalY + 15; 
     doc.setFillColor(245, 248, 250); doc.rect(14, finalY, 182, 12, 'F'); doc.setDrawColor(34, 211, 238); doc.setLineWidth(1.5); doc.line(14, finalY, 14, finalY + 12); 
     doc.setFontSize(10); doc.setTextColor(15, 23, 42); doc.setFont("helvetica", "bold"); doc.text("ESTADO FINANCIERO:", 18, finalY + 8);
-    if (cita.adelantoRealizado) { doc.setTextColor(16, 185, 129); doc.text(`ADELANTO CONFIRMADO: ${cita.montoAdelanto} Bs.`, 65, finalY + 8); } else { doc.setTextColor(220, 38, 38); doc.text(">> PAGO PENDIENTE DE ASIGNACIÓN", 65, finalY + 8); }
+    if (cita.adelantoRealizado) { doc.setTextColor(16, 185, 129); doc.text(`ADELANTO CONFIRMADO: ${cita.montoAdelanto} Bs. (Ref: ${cita.nroComprobante})`, 65, finalY + 8); } else { doc.setTextColor(220, 38, 38); doc.text(">> PAGO PENDIENTE DE ASIGNACIÓN", 65, finalY + 8); }
     const footerY = 250;
     const qrText = `[ OMNITECH SOLUTIONS ]\n====================================\nTICKET: ${cita.id}\nTITULAR: ${cita.nombre}\nFECHA: ${cita.fecha}\nESTADO: REGISTRADO\n====================================\nSu solicitud se encuentra en proceso.`;
     const base64QR = await generarQRBase64(qrText);
@@ -305,16 +321,31 @@ export default function AdminDashboard() {
     const finalY = (doc as any).lastAutoTable.finalY + 15; 
     doc.setFillColor(248, 250, 252); doc.rect(14, finalY, 182, 35, 'F'); drawHUDCorners(doc, 14, finalY, 182, 35, [15, 23, 42]); doc.setFillColor(15, 23, 42); doc.rect(14, finalY, 182, 8, 'F'); doc.setTextColor(255, 255, 255); doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.text("[ MATRIZ DE LIQUIDACIÓN Y SALDOS ]", 18, finalY + 5.5);
     doc.setTextColor(0, 0, 0); doc.setFontSize(10); doc.setFont("helvetica", "bold"); doc.text("Costo Total de Operación:", 18, finalY + 16); doc.setFont("courier", "bold"); doc.text(`${costoFinal.toFixed(2)} Bs.`, 160, finalY + 16, { align: "right" }); doc.setFont("helvetica", "bold"); doc.text("Adelanto Registrado a Cuenta:", 18, finalY + 23); doc.setFont("courier", "bold"); doc.text(`- ${adelanto.toFixed(2)} Bs.`, 160, finalY + 23, { align: "right" }); doc.setDrawColor(200); doc.line(18, finalY + 27, 160, finalY + 27); doc.setFont("helvetica", "black"); doc.setFontSize(11); doc.text("SALDO FINAL A CANCELAR:", 18, finalY + 32); doc.setFontSize(14); doc.setTextColor(220, 38, 38); doc.text(`${saldo > 0 ? saldo.toFixed(2) : "0.00"} Bs.`, 160, finalY + 33, { align: "right" });
-    const footerY = 250;
-    const qrText = `[ OMNITECH SOLUTIONS ]\n====================================\nID TRANSACCIÓN: ${cita.id}\nTITULAR: ${cita.nombre}\nFECHA CIERRE: ${new Date().toLocaleDateString()}\nCOSTO FINAL: ${costoFinal} Bs.\n====================================\nServicio Concluido Exitosamente.`;
+    
+    // === MODIFICADO: INCRUSTAR QR DE PAGO EN EL PDF ===
+    const footerY = 240; // Subimos el footer un poco para que quepa el QR
+    
+    // 1. QR Criptográfico de OmniTech (Izquierda)
+    const qrText = `[ OMNITECH SOLUTIONS ]\nID TRANSACCIÓN: ${cita.id}\nCOSTO FINAL: ${costoFinal} Bs.\nServicio Concluido Exitosamente.`;
     const base64QR = await generarQRBase64(qrText);
-    if (base64QR) { doc.addImage(base64QR, 'PNG', 14, footerY - 15, 32, 32); doc.setFontSize(6); doc.setTextColor(100); doc.setFont("courier", "bold"); doc.text("HASH VERIFICADO", 30, footerY + 21, { align: "center" }); }
+    if (base64QR) { doc.addImage(base64QR, 'PNG', 14, footerY - 5, 25, 25); doc.setFontSize(5); doc.setTextColor(100); doc.setFont("courier", "bold"); doc.text("HASH", 26.5, footerY + 23, { align: "center" }); }
+    
+    // 2. Firmas (Centro y Derecha)
     if (cita.modalidad === "En Domicilio") {
-      doc.setFillColor(241, 245, 249); doc.rect(70, footerY - 5, 125, 25, 'F'); doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.setTextColor(0); doc.text("[ VALIDACIÓN TÉCNICA REMOTA ]", 132.5, footerY + 2, { align: "center" }); doc.setFontSize(8); doc.setFont("helvetica", "normal"); doc.text("Certificación procesada vía enlace telemático en domicilio.", 132.5, footerY + 8, { align: "center" }); doc.setTextColor(16, 185, 129); doc.setFont("courier", "bold"); doc.text(`ESTADO DE RED: PENDIENTE`, 132.5, footerY + 14, { align: "center" });
+      doc.setFillColor(241, 245, 249); doc.rect(70, footerY - 5, 80, 25, 'F'); doc.setFontSize(8); doc.setFont("helvetica", "bold"); doc.setTextColor(0); doc.text("[ VALIDACIÓN REMOTA ]", 110, footerY + 2, { align: "center" }); doc.setFontSize(7); doc.setFont("helvetica", "normal"); doc.text("Procesada vía telemática.", 110, footerY + 8, { align: "center" }); doc.setTextColor(16, 185, 129); doc.setFont("courier", "bold"); doc.text(`RED: PENDIENTE`, 110, footerY + 14, { align: "center" });
     } else { 
-      doc.setDrawColor(100); doc.setLineWidth(0.4); doc.line(75, footerY + 10, 125, footerY + 10); doc.setTextColor(0); doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.text("FIRMA DEL CLIENTE", 100, footerY + 15, { align: "center" }); doc.setFontSize(7); doc.setFont("helvetica", "normal"); doc.setTextColor(100); doc.text("Conformidad de Finalización", 100, footerY + 19, { align: "center" });
-      doc.line(145, footerY + 10, 195, footerY + 10); doc.setTextColor(0); doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.text("MIGUEL ANGEL CUENCA C.", 170, footerY + 15, { align: "center" }); doc.setFontSize(7); doc.setFont("helvetica", "normal"); doc.setTextColor(100); doc.text("Director Operativo NOC", 170, footerY + 19, { align: "center" });
+      doc.setDrawColor(100); doc.setLineWidth(0.4); doc.line(55, footerY + 10, 100, footerY + 10); doc.setTextColor(0); doc.setFontSize(8); doc.setFont("helvetica", "bold"); doc.text("FIRMA DEL CLIENTE", 77.5, footerY + 14, { align: "center" });
+      doc.line(110, footerY + 10, 155, footerY + 10); doc.setTextColor(0); doc.setFontSize(8); doc.setFont("helvetica", "bold"); doc.text("MIGUEL ANGEL CUENCA", 132.5, footerY + 14, { align: "center" });
     }
+
+    // 3. QR Oficial de Pagos (Derecha Absoluta)
+    const qrPagoImg = await getQRPagoBase64();
+    if (qrPagoImg) {
+      doc.setDrawColor(34, 211, 238); doc.setLineWidth(0.5); doc.roundedRect(165, footerY - 5, 25, 25, 1, 1, 'S');
+      doc.addImage(qrPagoImg, 'PNG', 166, footerY - 4, 23, 23);
+      doc.setFontSize(6); doc.setTextColor(220, 38, 38); doc.setFont("helvetica", "bold"); doc.text("ESCANEE PARA PAGAR", 177.5, footerY - 7, { align: "center" });
+    }
+
     await procesarYCompartirPDF(doc, `OmniTech_Entrega_${cita.nombre.replace(/\s+/g, '_')}.pdf`);
   };
 
@@ -322,6 +353,7 @@ export default function AdminDashboard() {
   if (!user) { 
     return ( 
       <div className="min-h-screen bg-[#030712] flex items-center justify-center p-4 relative overflow-hidden"> 
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px] pointer-events-none"></div> 
         <div className="bg-[#0a1120]/90 p-8 md:p-10 rounded-2xl border border-cyan-500/40 backdrop-blur-xl shadow-[0_0_50px_rgba(34,211,238,0.15)] w-full max-w-md relative z-10"> 
           <div className="text-center mb-8"><h1 className="text-3xl font-black text-white tracking-widest">SISTEMA <span className="text-cyan-500">NOC</span></h1><p className="text-red-400 font-mono text-xs mt-2 font-bold tracking-widest border border-red-900/50 bg-red-950/30 py-1 rounded">ACCESO RESTRINGIDO</p></div> 
           <form onSubmit={handleLogin} className="space-y-6"> 
@@ -367,7 +399,6 @@ export default function AdminDashboard() {
                 <input type="text" placeholder="Buscar por Nombre o ID..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-[#030712] border border-slate-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-cyan-400 text-sm font-mono" />
               </div>
 
-              {/* === NUEVO: RADAR GLOBAL DESPLEGABLE === */}
               <div className="relative w-full sm:w-auto">
                 <button 
                   onClick={() => setShowAgenda(!showAgenda)} 
@@ -401,7 +432,6 @@ export default function AdminDashboard() {
                               </div>
                             </div>
                             
-                            {/* === NUEVO: BOTÓN SINCRONIZAR ALARMA === */}
                             <a 
                               href={generarEnlaceCalendario(c)} 
                               target="_blank" 
@@ -420,7 +450,6 @@ export default function AdminDashboard() {
               </div>
             </div>
             
-            {/* CONTENEDOR DE LA TABLA */}
             <div className="bg-[#0a1120]/80 rounded-2xl border border-cyan-500/30 overflow-visible backdrop-blur-md shadow-2xl relative z-10">
               <div className="overflow-x-auto pb-32">
                 <table className="w-full text-left border-collapse min-w-[1000px]">
@@ -444,7 +473,6 @@ export default function AdminDashboard() {
                           <p className="text-[10px] text-slate-400 font-mono mb-2">ID: {cita.id}</p>
                           
                           <div className="flex flex-col space-y-2">
-                            {/* HORA EDITABLE Y BLOQUEABLE */}
                             <div className={`flex items-center space-x-2 text-xs font-mono px-2 py-1 rounded border w-max ${isLocked ? 'bg-blue-950/50 border-blue-900/50 text-blue-400' : 'bg-slate-950 border-slate-800 text-slate-400'}`}>
                               <span>{cita.fecha} |</span>
                               <input 
