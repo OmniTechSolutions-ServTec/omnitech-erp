@@ -86,9 +86,7 @@ export default function Home() {
     } else { setDateError(""); }
   };
 
-  // === MODIFICADO: VALIDACIÓN ESTRICTA DE NÚMERO DE BOLIVIA ===
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    // Solo permite números
     const value = e.target.value.replace(/\D/g, '');
     setFormData({ ...formData, telefono: value });
   };
@@ -140,11 +138,12 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-[#030712] text-white flex flex-col items-center justify-center p-4 md:p-8 selection:bg-cyan-500 selection:text-black relative overflow-x-hidden">
       
-      {/* 1. SPLASH SCREEN */}
+      {/* 1. SPLASH SCREEN (Premium Corporate) */}
       {showSplash && (
         <div className={`fixed inset-0 z-[200] flex flex-col items-center justify-center bg-[#030712] transition-opacity duration-1000 ease-in-out ${isSplashFading ? 'opacity-0' : 'opacity-100'}`}>
-          <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px] pointer-events-none"></div>
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-cyan-900 rounded-full mix-blend-screen filter blur-[150px] opacity-30 animate-pulse"></div>
+          {/* Fondo elegante Splash */}
+          <div className="absolute top-[-10%] left-[-10%] w-96 h-96 bg-cyan-900/40 rounded-full mix-blend-screen filter blur-[150px] opacity-50 animate-pulse"></div>
+          <div className="absolute bottom-[-10%] right-[-10%] w-96 h-96 bg-blue-900/40 rounded-full mix-blend-screen filter blur-[150px] opacity-50 animate-pulse" style={{ animationDelay: '2s' }}></div>
           
           <div className="relative z-10 flex flex-col items-center p-8 max-w-md w-full text-center">
             <div className="w-32 h-32 mb-6 drop-shadow-[0_0_20px_rgba(34,211,238,0.6)] animate-[bounce_3s_infinite]">
@@ -177,11 +176,11 @@ export default function Home() {
         </div>
       )}
 
-      {/* INTERFAZ PRINCIPAL DEL SISTEMA */}
-      <div className="absolute top-[-10%] left-[-10%] w-96 h-96 bg-cyan-600 rounded-full mix-blend-screen filter blur-[120px] opacity-20 pointer-events-none"></div>
-      <div className="absolute bottom-[-10%] right-[-10%] w-96 h-96 bg-blue-700 rounded-full mix-blend-screen filter blur-[120px] opacity-20 pointer-events-none"></div>
+      {/* INTERFAZ PRINCIPAL DEL SISTEMA (Fondos Premium) */}
+      <div className="absolute top-[-10%] left-[-10%] w-[50vw] h-[50vw] bg-cyan-700/20 rounded-full mix-blend-screen filter blur-[150px] pointer-events-none z-0 animate-pulse"></div>
+      <div className="absolute bottom-[-10%] right-[-10%] w-[50vw] h-[50vw] bg-blue-800/20 rounded-full mix-blend-screen filter blur-[150px] pointer-events-none z-0 animate-pulse" style={{ animationDelay: '3s' }}></div>
 
-      <div className="max-w-7xl w-full grid grid-cols-1 lg:grid-cols-2 gap-12 items-center z-10 my-auto">
+      <div className="max-w-7xl w-full grid grid-cols-1 lg:grid-cols-2 gap-12 items-center z-10 my-auto relative">
         
         <div className="space-y-8 flex flex-col items-center lg:items-start text-center lg:text-left">
           <div className="w-32 h-32 relative drop-shadow-[0_0_15px_rgba(34,211,238,0.5)] transform transition hover:scale-105">
@@ -193,7 +192,6 @@ export default function Home() {
             </h1>
             <p className="text-cyan-100/60 font-light text-lg max-w-md">Soporte IT Premium y Mantenimiento Avanzado.</p>
             
-            {/* === MODIFICADO: DOBLE ETIQUETA === */}
             <div className="flex flex-col items-center lg:items-start mt-4 space-y-3">
               <div className="inline-flex items-center bg-cyan-950/30 border border-cyan-800/50 px-4 py-2 rounded-full">
                 <svg className="w-4 h-4 text-cyan-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
@@ -221,7 +219,6 @@ export default function Home() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div><label className="block text-xs font-semibold text-cyan-500/80 mb-1 uppercase tracking-wider">Nombre Completo</label><input type="text" value={formData.nombre} onChange={(e) => setFormData({...formData, nombre: e.target.value})} className="w-full bg-[#030712] border border-slate-800 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-cyan-400 transition-all" /></div>
               
-              {/* === MODIFICADO: VALIDACIÓN ESTRICTA DE NÚMERO Y CÓDIGO BOLIVIA === */}
               <div>
                 <label className="block text-xs font-semibold text-cyan-500/80 mb-1 uppercase tracking-wider">Nro. WhatsApp</label>
                 <div className="flex">
@@ -235,7 +232,6 @@ export default function Home() {
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* === MODIFICADO: ETIQUETA DE FECHA === */}
               <div><label className="block text-[10px] sm:text-[11px] font-semibold text-cyan-500/80 mb-1 uppercase tracking-wider">FECHA PARA LA CITA TÉCNICA SOLO FINES DE SEMANA</label><input type="date" value={formData.fecha} onChange={handleDateChange} className={`w-full bg-[#030712] border ${dateError ? 'border-red-500' : 'border-slate-800'} rounded-lg px-4 py-3 text-white focus:outline-none focus:border-cyan-400 transition-all [&::-webkit-calendar-picker-indicator]:invert`} /></div>
               <div><label className="block text-[10px] sm:text-[11px] font-semibold text-cyan-500/80 mb-1 uppercase tracking-wider">Hora</label><input type="time" min="08:00" max="20:00" value={formData.hora} onChange={(e) => setFormData({...formData, hora: e.target.value})} className="w-full bg-[#030712] border border-slate-800 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-cyan-400 transition-all [&::-webkit-calendar-picker-indicator]:invert" /></div>
             </div>

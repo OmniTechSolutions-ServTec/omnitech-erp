@@ -43,7 +43,6 @@ export default function AdminDashboard() {
   });
   const [guardandoCierre, setGuardandoCierre] = useState(false);
 
-  // === NUEVO: ESTADO PARA CONTROLAR EL MENÚ DE WHATSAPP EN CELULARES ===
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -119,7 +118,6 @@ export default function AdminDashboard() {
   };
   const handleLogout = async () => { await signOut(auth); };
 
-  // === MODIFICADO: MOTOR DE ENLACES WA PROFUNDO (wa.me) ===
   const generarEnlaceWA = (cita: any, tipo: 'coordinacion' | 'ingreso' | 'finalizado') => {
     let numStr = cita.telefono ? String(cita.telefono).replace(/\D/g, '') : '';
     numStr = numStr.replace(/^591/, '');
@@ -135,7 +133,6 @@ export default function AdminDashboard() {
       texto = `Estimado/a ${cita.nombre},\n\nDesde *OmniTech Solutions* le comunicamos que el servicio técnico correspondiente a su solicitud ha sido completado.\n\nEn breve le remitiremos el Certificado de Finalización Técnica en formato PDF, detallando el trabajo realizado y la liquidación correspondiente.\n\n*Puede realizar el pago correspondiente escaneando el código QR oficial de pago que viene adjunto en la parte inferior de su PDF.*\n\nQuedamos a su entera disposición.\nGracias por su confianza.`;
     }
     
-    // CAMBIO VITAL: Ahora usa el Deep Link oficial wa.me para evadir bloqueos de contacto
     return `https://wa.me/${num}?text=${encodeURIComponent(texto)}`;
   };
 
@@ -231,7 +228,7 @@ export default function AdminDashboard() {
     });
 
   // ==========================================================
-  // GENERADORES DE PDF (DESCARGA DIRECTA)
+  // GENERADORES DE PDF 
   // ==========================================================
   const sanitizarTelefono = (tel: string) => {
     if (!tel) return "No registrado";
@@ -315,6 +312,9 @@ export default function AdminDashboard() {
   if (!user) { 
     return ( 
       <div className="min-h-screen bg-[#030712] flex items-center justify-center p-4 relative overflow-hidden"> 
+        {/* Fondo Premium Login */}
+        <div className="absolute top-[-20%] left-[-10%] w-96 h-96 bg-cyan-900/30 rounded-full mix-blend-screen filter blur-[150px] pointer-events-none animate-pulse"></div>
+        <div className="absolute bottom-[-20%] right-[-10%] w-96 h-96 bg-blue-900/30 rounded-full mix-blend-screen filter blur-[150px] pointer-events-none animate-pulse" style={{ animationDelay: '2s' }}></div>
         <div className="bg-[#0a1120]/90 p-8 md:p-10 rounded-2xl border border-cyan-500/40 backdrop-blur-xl shadow-[0_0_50px_rgba(34,211,238,0.15)] w-full max-w-md relative z-10"> 
           <div className="text-center mb-8"><h1 className="text-3xl font-black text-white tracking-widest">SISTEMA <span className="text-cyan-500">NOC</span></h1><p className="text-red-400 font-mono text-xs mt-2 font-bold tracking-widest border border-red-900/50 bg-red-950/30 py-1 rounded">ACCESO RESTRINGIDO</p></div> 
           <form onSubmit={handleLogin} className="space-y-6"> 
@@ -329,9 +329,14 @@ export default function AdminDashboard() {
   }
 
   return (
-    // === MODIFICADO: overflow-x-hidden AÑADIDO AL MAIN PARA MATAR LA FRANJA BLANCA MÓVIL ===
-    <main className="min-h-screen bg-[#030712] text-white p-4 md:p-8 font-sans selection:bg-cyan-500 relative overflow-x-hidden w-full">
-      <div className="fixed inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px] pointer-events-none z-0"></div>
+    // === REPARACIÓN DEL DESPLAZAMIENTO (overflow-x-hidden) ===
+    <main className="min-h-screen bg-[#030712] text-white p-4 md:p-8 font-sans selection:bg-cyan-500 relative w-full overflow-x-hidden">
+      
+      {/* Fondo Premium Admin */}
+      <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden">
+        <div className="absolute top-[-10%] left-[-5%] w-[40vw] h-[40vw] bg-cyan-900/20 rounded-full mix-blend-screen filter blur-[120px] animate-pulse"></div>
+        <div className="absolute bottom-[-10%] right-[-5%] w-[40vw] h-[40vw] bg-blue-900/20 rounded-full mix-blend-screen filter blur-[120px] animate-pulse" style={{ animationDelay: '3s' }}></div>
+      </div>
       
       <div className="max-w-[1400px] mx-auto relative z-10">
         <header className="flex flex-col md:flex-row justify-between items-center bg-[#0a1120]/90 border border-slate-800 p-6 rounded-2xl backdrop-blur-xl mb-6 shadow-[0_0_30px_rgba(34,211,238,0.1)]">
@@ -481,7 +486,7 @@ export default function AdminDashboard() {
                         <td className="p-4 align-top w-72">
                           <div className="grid grid-cols-2 gap-3 relative">
                             
-                            {/* === MODIFICADO: MENÚ DE WHATSAPP REESCRITO PARA CELULARES (ONCLICK REACT) === */}
+                            {/* === MENÚ DE WHATSAPP REPARADO PARA CELULAR === */}
                             <div className="bg-[#030712] border border-green-900/50 p-2 rounded-lg shadow-inner flex flex-col justify-between">
                               <p className="text-[8px] text-green-500 font-bold uppercase tracking-widest mb-2 text-center">Mensajería WA</p>
                               <div className="flex flex-col space-y-1.5 relative">
